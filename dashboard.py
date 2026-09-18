@@ -17,8 +17,24 @@ import theme
 
 st.set_page_config(page_title="Pairs Trading Monitor", layout="wide")
 st.markdown(theme.CSS, unsafe_allow_html=True)
-st.title("Pairs Trading Monitor")
-st.caption("Monitoramento de spread e z-score — RKLB/PL · RPD/TENB")
+
+PAIR_LABELS = [f"{a}/{b}" for a, b in config.PAIRS]
+
+if "selected_pair" not in st.session_state:
+    st.session_state.selected_pair = PAIR_LABELS[0]
+
+with st.sidebar:
+    st.markdown("### Pairs Trading")
+    for label in PAIR_LABELS:
+        is_active = st.session_state.selected_pair == label
+        if st.button(
+            label,
+            key=f"nav_{label}",
+            type="primary" if is_active else "secondary",
+            use_container_width=True,
+        ):
+            st.session_state.selected_pair = label
+            st.rerun()
 
 
 @st.cache_data(ttl=300)
@@ -72,7 +88,7 @@ def build_signal_history(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def render_pair(par: str) -> None:
-    st.markdown(f"## {par}")
+    st.markdown(f"# {par}")
     df = load_zscore_df(par)
 
     if df.empty:
@@ -155,6 +171,4 @@ def render_pair(par: str) -> None:
         st.dataframe(historico, width="stretch", hide_index=True)
 
 
-for ticker_a, ticker_b in config.PAIRS:
-    render_pair(f"{ticker_a}/{ticker_b}")
-    st.divider()
+render_pair(st.session_state.selected_pair)

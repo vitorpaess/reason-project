@@ -103,6 +103,48 @@ hr {{
     border: 1px solid {BORDER};
     border-radius: 6px;
 }}
+
+/* Navegação lateral estilo lista de itens (sidebar) */
+[data-testid="stSidebar"] {{
+    background-color: {PAGE_BG};
+    border-right: 1px solid {GRIDLINE};
+}}
+
+[data-testid="stSidebar"] .block-container {{
+    padding-top: 1.5rem;
+}}
+
+[data-testid="stSidebar"] h3 {{
+    padding: 0 0.25rem;
+    margin-bottom: 0.5rem;
+}}
+
+[data-testid="stSidebar"] button {{
+    justify-content: flex-start !important;
+    text-align: left !important;
+    border: none !important;
+    box-shadow: none !important;
+    font-weight: 500 !important;
+    padding: 0.45rem 0.6rem !important;
+    margin-bottom: 0.1rem;
+    border-radius: 6px !important;
+}}
+
+[data-testid="stSidebar"] button[kind="secondary"] {{
+    background-color: transparent !important;
+    color: {INK_SECONDARY} !important;
+}}
+
+[data-testid="stSidebar"] button[kind="secondary"]:hover {{
+    background-color: {SURFACE} !important;
+    color: {INK_PRIMARY} !important;
+}}
+
+[data-testid="stSidebar"] button[kind="primary"] {{
+    background-color: {SURFACE} !important;
+    color: {INK_PRIMARY} !important;
+    border-left: 2px solid {SERIES_Z_SCORE} !important;
+}}
 </style>
 """
 
