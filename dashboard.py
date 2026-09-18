@@ -13,9 +13,12 @@ import streamlit as st
 
 import config
 import db
+import theme
 
 st.set_page_config(page_title="Pairs Trading Monitor", layout="wide")
+st.markdown(theme.CSS, unsafe_allow_html=True)
 st.title("Pairs Trading Monitor")
+st.caption("Monitoramento de spread e z-score — RKLB/PL · RPD/TENB")
 
 
 @st.cache_data(ttl=300)
@@ -69,7 +72,7 @@ def build_signal_history(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def render_pair(par: str) -> None:
-    st.header(par)
+    st.markdown(f"## {par}")
     df = load_zscore_df(par)
 
     if df.empty:
@@ -116,19 +119,36 @@ def render_pair(par: str) -> None:
 
     # --- Gráfico de z-score ---
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df_valido["data"], y=df_valido["z_score"], mode="lines", name="z-score"))
+    fig.add_trace(
+        go.Scatter(
+            x=df_valido["data"],
+            y=df_valido["z_score"],
+            mode="lines",
+            name="z-score",
+            line=dict(color=theme.SERIES_Z_SCORE, width=2),
+            hovertemplate="%{x|%d %b %Y}<br>z = %{y:.2f}<extra></extra>",
+        )
+    )
     for limite, cor, label in [
-        (config.ENTRY_THRESHOLD, "red", "entrada +"),
-        (-config.ENTRY_THRESHOLD, "red", "entrada -"),
-        (config.EXIT_THRESHOLD, "green", "saída +"),
-        (-config.EXIT_THRESHOLD, "green", "saída -"),
+        (config.ENTRY_THRESHOLD, theme.STATUS_CRITICAL, "entrada"),
+        (-config.ENTRY_THRESHOLD, theme.STATUS_CRITICAL, "entrada"),
+        (config.EXIT_THRESHOLD, theme.STATUS_GOOD, "saída"),
+        (-config.EXIT_THRESHOLD, theme.STATUS_GOOD, "saída"),
     ]:
-        fig.add_hline(y=limite, line_dash="dash", line_color=cor, annotation_text=label)
-    fig.update_layout(height=400, margin=dict(t=20, b=20), yaxis_title="z-score")
-    st.plotly_chart(fig, width="stretch")
+        fig.add_hline(
+            y=limite,
+            line_dash="dot",
+            line_width=1,
+            line_color=cor,
+            annotation_text=label,
+            annotation_font=dict(size=10, color=theme.INK_MUTED),
+            annotation_position="right",
+        )
+    theme.plotly_layout(fig)
+    st.plotly_chart(fig, theme=None, use_container_width=True)
 
     # --- Histórico de sinais ---
-    st.subheader("Histórico de sinais")
+    st.markdown("### Histórico de sinais")
     if historico.empty:
         st.caption("Nenhum sinal de entrada/saída disparado ainda.")
     else:
