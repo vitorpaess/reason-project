@@ -116,7 +116,7 @@ function StatusDetail({ status }: { status: PairStatus }) {
     const e = status.openPosition;
     return (
       <span>
-        desde {formatDate(e.dataEntrada)} ({e.diasEmAberto}d) — {e.direcao}
+        desde {formatDate(e.dataEntrada)} ({e.diasEmAberto.toFixed(1)}d) — {e.direcao}
       </span>
     );
   }
@@ -124,7 +124,8 @@ function StatusDetail({ status }: { status: PairStatus }) {
     const e = status.openPosition;
     return (
       <span>
-        entrada em {formatDate(e.dataEntrada)} ({e.diasEmAberto}d) — |z| voltou pra zona de saída
+        entrada em {formatDate(e.dataEntrada)} ({e.diasEmAberto.toFixed(1)}d) — |z| voltou pra zona
+        de saída
       </span>
     );
   }
