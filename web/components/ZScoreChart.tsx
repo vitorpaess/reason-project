@@ -1,0 +1,158 @@
+"use client";
+
+import {
+  Area,
+  CartesianGrid,
+  ComposedChart,
+  ReferenceArea,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import type { DotProps } from "recharts";
+import { colors } from "@/lib/theme";
+import { ENTRY_THRESHOLD, EXIT_THRESHOLD } from "@/lib/config";
+import type { ZScoreRow } from "@/lib/pairs-data";
+
+type ChartPoint = {
+  data: string;
+  z_score: number;
+  sinal: ZScoreRow["sinal"];
+};
+
+function formatDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+}
+
+function EventDot(props: DotProps & { payload?: ChartPoint }) {
+  const { cx, cy, payload } = props;
+  if (!payload || payload.sinal === "nenhum" || cx === undefined || cy === undefined) {
+    return <g />;
+  }
+  const color = payload.sinal === "entrada" ? colors.statusCritical : colors.statusGood;
+  return <circle cx={cx} cy={cy} r={5} fill={color} stroke={colors.surface} strokeWidth={1.5} />;
+}
+
+function ChartTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: { payload: ChartPoint }[];
+}) {
+  if (!active || !payload || payload.length === 0) return null;
+  const point = payload[0].payload;
+  return (
+    <div
+      className="rounded-lg border px-3 py-2 text-xs shadow-[var(--shadow-card)]"
+      style={{ backgroundColor: colors.surfaceRaised, borderColor: colors.border }}
+    >
+      <div className="text-ink-muted">{formatDate(point.data)}</div>
+      <div className="mt-0.5 font-semibold tabular-nums text-ink-primary">
+        z = {point.z_score.toFixed(2)}
+      </div>
+      {point.sinal !== "nenhum" && (
+        <div
+          className="mt-0.5 font-medium"
+          style={{ color: point.sinal === "entrada" ? colors.statusCritical : colors.statusGood }}
+        >
+          {point.sinal === "entrada" ? "Entrada" : "Saída"}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ZScoreChart({ rows }: { rows: ZScoreRow[] }) {
+  const points: ChartPoint[] = rows
+    .filter((r) => r.z_score !== null)
+    .map((r) => ({ data: r.data, z_score: r.z_score as number, sinal: r.sinal }));
+
+  const values = points.map((p) => p.z_score);
+  const yMax = Math.max(...values, ENTRY_THRESHOLD) + 0.3;
+  const yMin = Math.min(...values, -ENTRY_THRESHOLD) - 0.3;
+
+  return (
+    <div>
+      <ResponsiveContainer width="100%" height={380}>
+        <ComposedChart data={points} margin={{ top: 12, right: 12, bottom: 0, left: 0 }}>
+          <defs>
+            <linearGradient id="zscore-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={colors.seriesZScore} stopOpacity={0.28} />
+              <stop offset="100%" stopColor={colors.seriesZScore} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+
+          <ReferenceArea
+            y1={ENTRY_THRESHOLD}
+            y2={yMax}
+            fill={colors.statusCritical}
+            fillOpacity={0.08}
+            strokeWidth={0}
+          />
+          <ReferenceArea
+            y1={yMin}
+            y2={-ENTRY_THRESHOLD}
+            fill={colors.statusCritical}
+            fillOpacity={0.08}
+            strokeWidth={0}
+          />
+          <ReferenceArea
+            y1={-EXIT_THRESHOLD}
+            y2={EXIT_THRESHOLD}
+            fill={colors.statusGood}
+            fillOpacity={0.07}
+            strokeWidth={0}
+          />
+
+          <CartesianGrid horizontal vertical={false} stroke={colors.gridline} />
+
+          <XAxis
+            dataKey="data"
+            tickFormatter={formatDate}
+            tick={{ fill: colors.inkMuted, fontSize: 11 }}
+            axisLine={{ stroke: colors.baseline }}
+            tickLine={false}
+            minTickGap={32}
+          />
+          <YAxis
+            domain={[yMin, yMax]}
+            tick={{ fill: colors.inkMuted, fontSize: 11 }}
+            axisLine={false}
+            tickLine={false}
+            width={36}
+          />
+
+          <Tooltip content={<ChartTooltip />} cursor={{ stroke: colors.baseline, strokeWidth: 1 }} />
+
+          <Area
+            type="monotone"
+            dataKey="z_score"
+            stroke={colors.seriesZScore}
+            strokeWidth={2.5}
+            fill="url(#zscore-fill)"
+            dot={<EventDot />}
+            activeDot={{ r: 4, fill: colors.seriesZScore, stroke: colors.surface, strokeWidth: 2 }}
+            isAnimationActive={false}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+
+      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-ink-muted">
+        <LegendDot color={colors.statusCritical} label={`Zona de entrada · |z| > ${ENTRY_THRESHOLD}`} />
+        <LegendDot color={colors.statusGood} label={`Zona de saída · |z| < ${EXIT_THRESHOLD}`} />
+      </div>
+    </div>
+  );
+}
+
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+      {label}
+    </span>
+  );
+}

@@ -17,8 +17,10 @@ Rode `sql/schema.sql` uma vez no SQL Editor do Supabase antes da primeira execu�
 
 ```bash
 python run_daily.py        # coleta preços + recalcula z-scores dos dois pares
-streamlit run dashboard.py # dashboard local
 ```
+
+Dashboard: ver [web/README.md](web/README.md) — app Next.js (rodando local com
+`npm run dev` ou publicado no Vercel), que substituiu a versão Streamlit.
 
 ## Estrutura
 
@@ -26,7 +28,7 @@ streamlit run dashboard.py # dashboard local
 - `collect_prices.py` — Parte 1: coleta e acumula preços brutos no Supabase (tabela `precos_diarios`)
 - `compute_zscore.py` — Parte 2: calcula correlação móvel, spread, z-score e sinais (tabela `pares_zscore`)
 - `run_daily.py` — orquestra as duas etapas acima
-- `dashboard.py` — Parte 4: dashboard Streamlit lendo direto do Supabase
+- `web/` — Parte 4: dashboard Next.js lendo direto do Supabase (ver `web/README.md`)
 - `config.py` — parâmetros ajustáveis (pares, janela de 63 dias, thresholds 1.2/0.5)
 
 ## Parâmetros
