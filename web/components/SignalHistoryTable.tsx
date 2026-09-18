@@ -10,47 +10,64 @@ export function SignalHistoryTable({ oportunidades }: { oportunidades: SignalEve
     return <p className="text-sm text-ink-muted">Nenhuma oportunidade ainda.</p>;
   }
 
+  const temEstimada = oportunidades.some((e) => e.estimada);
+
   return (
-    <div className="overflow-hidden rounded-xl border border-border">
-      <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="border-b border-border bg-surface text-xs uppercase tracking-wide text-ink-muted">
-            <th className="px-4 py-2.5 font-medium">Entrada</th>
-            <th className="px-4 py-2.5 font-medium">z entrada</th>
-            <th className="px-4 py-2.5 font-medium">Direção</th>
-            <th className="px-4 py-2.5 font-medium">Saída</th>
-            <th className="px-4 py-2.5 font-medium">z saída</th>
-            <th className="px-4 py-2.5 text-right font-medium">Duração</th>
-          </tr>
-        </thead>
-        <tbody>
-          {oportunidades.map((evento, i) => (
-            <tr
-              key={`${evento.dataEntrada}-${i}`}
-              className="border-b border-border bg-surface last:border-b-0"
-            >
-              <td className="px-4 py-2.5 text-ink-secondary">{formatDate(evento.dataEntrada)}</td>
-              <td className="px-4 py-2.5 tabular-nums text-ink-primary">
-                {evento.zEntrada.toFixed(2)}
-              </td>
-              <td className="px-4 py-2.5 text-ink-muted">{evento.direcao ?? "—"}</td>
-              <td className="px-4 py-2.5 text-ink-secondary">
-                {evento.dataSaida ? (
-                  formatDate(evento.dataSaida)
-                ) : (
-                  <span className="text-status-critical">em aberto</span>
-                )}
-              </td>
-              <td className="px-4 py-2.5 tabular-nums text-ink-primary">
-                {evento.zSaida !== null ? evento.zSaida.toFixed(2) : "—"}
-              </td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-ink-primary">
-                {evento.diasEmAberto}d
-              </td>
+    <div>
+      <div className="overflow-hidden rounded-xl border border-border">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-border bg-surface text-xs uppercase tracking-wide text-ink-muted">
+              <th className="px-4 py-2.5 font-medium">Entrada</th>
+              <th className="px-4 py-2.5 font-medium">z entrada</th>
+              <th className="px-4 py-2.5 font-medium">Direção</th>
+              <th className="px-4 py-2.5 font-medium">Saída</th>
+              <th className="px-4 py-2.5 font-medium">z saída</th>
+              <th className="px-4 py-2.5 text-right font-medium">Duração</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {oportunidades.map((evento, i) => (
+              <tr
+                key={`${evento.dataEntrada}-${i}`}
+                className="border-b border-border bg-surface last:border-b-0"
+              >
+                <td className="px-4 py-2.5 text-ink-secondary">
+                  {formatDate(evento.dataEntrada)}
+                  {evento.estimada && (
+                    <span className="ml-1.5 text-ink-muted" title="Estimada com o z-score expansivo — período anterior aos 63 dias oficiais">
+                      *
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-2.5 tabular-nums text-ink-primary">
+                  {evento.zEntrada.toFixed(2)}
+                </td>
+                <td className="px-4 py-2.5 text-ink-muted">{evento.direcao ?? "—"}</td>
+                <td className="px-4 py-2.5 text-ink-secondary">
+                  {evento.dataSaida ? (
+                    formatDate(evento.dataSaida)
+                  ) : (
+                    <span className="text-status-critical">em aberto</span>
+                  )}
+                </td>
+                <td className="px-4 py-2.5 tabular-nums text-ink-primary">
+                  {evento.zSaida !== null ? evento.zSaida.toFixed(2) : "—"}
+                </td>
+                <td className="px-4 py-2.5 text-right tabular-nums text-ink-primary">
+                  {evento.diasEmAberto}d
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {temEstimada && (
+        <p className="mt-2 text-xs text-ink-muted">
+          * estimada com o z-score expansivo (período anterior aos 63 dias oficiais, não seria um
+          sinal real de entrada/saída)
+        </p>
+      )}
     </div>
   );
 }

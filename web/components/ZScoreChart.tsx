@@ -22,6 +22,7 @@ type ChartPoint = {
   z_expansivo: number;
   z_63d: number | null;
   marker: Marker;
+  estimada: boolean;
 };
 
 function formatDate(iso: string): string {
@@ -35,6 +36,11 @@ function EventDot(props: DotProps & { payload?: ChartPoint }) {
     return <g />;
   }
   const color = payload.marker === "entrada" ? colors.statusCritical : colors.statusGood;
+  // Estimada (período pré-63d): contorno vazado, não preenchido — sinaliza
+  // visualmente que não é um cruzamento oficial de limiar.
+  if (payload.estimada) {
+    return <circle cx={cx} cy={cy} r={5} fill={colors.surface} stroke={color} strokeWidth={1.75} />;
+  }
   return <circle cx={cx} cy={cy} r={5} fill={color} stroke={colors.surface} strokeWidth={1.5} />;
 }
 
@@ -64,7 +70,8 @@ function ChartTooltip({
           className="mt-0.5 font-medium"
           style={{ color: point.marker === "entrada" ? colors.statusCritical : colors.statusGood }}
         >
-          {point.marker === "entrada" ? "Entrada confirmada" : "Saída confirmada"}
+          {point.marker === "entrada" ? "Entrada" : "Saída"}
+          {point.estimada ? " (estimada)" : " (oficial)"}
         </div>
       )}
     </div>
@@ -79,8 +86,10 @@ export function ZScoreChart({
   /** Oportunidades oficiais (63d) — marcam os pontos de entrada/saída no gráfico. */
   events?: SignalEvent[];
 }) {
-  const entryDates = new Set(events.map((e) => e.dataEntrada));
-  const exitDates = new Set(events.filter((e) => e.dataSaida).map((e) => e.dataSaida as string));
+  const entryDates = new Map(events.map((e) => [e.dataEntrada, e.estimada]));
+  const exitDates = new Map(
+    events.filter((e) => e.dataSaida).map((e) => [e.dataSaida as string, e.estimada])
+  );
 
   // A linha plotada é sempre o z-score expansivo (histórico) — cobre
   // desde o início dos dados, diferente do card "Z-score atual" no topo
@@ -89,13 +98,20 @@ export function ZScoreChart({
     .filter((r) => r.z_score_expansivo !== null)
     .map((r) => {
       let marker: Marker = "nenhum";
-      if (entryDates.has(r.data)) marker = "entrada";
-      else if (exitDates.has(r.data)) marker = "saida";
+      let estimada = false;
+      if (entryDates.has(r.data)) {
+        marker = "entrada";
+        estimada = entryDates.get(r.data) as boolean;
+      } else if (exitDates.has(r.data)) {
+        marker = "saida";
+        estimada = exitDates.get(r.data) as boolean;
+      }
       return {
         data: r.data,
         z_expansivo: r.z_score_expansivo as number,
         z_63d: r.z_score_63d,
         marker,
+        estimada,
       };
     });
 

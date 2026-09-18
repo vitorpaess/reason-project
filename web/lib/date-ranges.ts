@@ -1,4 +1,4 @@
-export type RangeKey = "1D" | "1S" | "1M" | "3M" | "1A" | "5A" | "TUDO";
+export type RangeKey = "1D" | "1S" | "1M" | "3M" | "1A" | "5A" | "TUDO" | "CUSTOM";
 
 export const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
   { key: "1D", label: "1D" },
@@ -8,6 +8,7 @@ export const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
   { key: "1A", label: "1A" },
   { key: "5A", label: "5A" },
   { key: "TUDO", label: "Tudo" },
+  { key: "CUSTOM", label: "Personalizado" },
 ];
 
 /**
@@ -17,7 +18,7 @@ export const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
  * não rodou. Retorna null para "TUDO" (sem corte).
  */
 export function rangeStartDate(key: RangeKey, mostRecentIso: string): string | null {
-  if (key === "TUDO") return null;
+  if (key === "TUDO" || key === "CUSTOM") return null;
 
   const start = new Date(mostRecentIso + "T00:00:00");
   switch (key) {

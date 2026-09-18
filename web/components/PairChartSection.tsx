@@ -14,27 +14,58 @@ export function PairChartSection({
   oportunidades: SignalEvent[];
 }) {
   const [range, setRange] = useState<RangeKey>("TUDO");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
 
-  const mostRecent = rows.length > 0 ? rows[rows.length - 1].data : null;
-  const start = mostRecent ? rangeStartDate(range, mostRecent) : null;
+  const dataMin = rows.length > 0 ? rows[0].data : null;
+  const dataMax = rows.length > 0 ? rows[rows.length - 1].data : null;
+
+  const start =
+    range === "CUSTOM" ? customStart || dataMin : dataMax ? rangeStartDate(range, dataMax) : null;
+  // Presets sempre vão até o dado mais recente (sem limite superior);
+  // só o período personalizado tem uma data final própria.
+  const end = range === "CUSTOM" ? customEnd || dataMax : null;
 
   const filteredRows = useMemo(() => {
-    if (!start) return rows;
-    return rows.filter((r) => r.data >= start);
-  }, [rows, start]);
+    return rows.filter((r) => (!start || r.data >= start) && (!end || r.data <= end));
+  }, [rows, start, end]);
 
-  // Uma oportunidade "pertence" ao período filtrado se ainda está em
-  // aberto (segue relevante até hoje) ou se foi encerrada dentro da
-  // janela — mesmo que tenha começado antes do início do período.
+  // Uma oportunidade "pertence" ao período filtrado se sobrepõe a janela:
+  // começou até o fim do período E (ainda está aberta OU terminou depois
+  // do início do período) — mesmo que tenha começado antes da janela.
   const filteredOportunidades = useMemo(() => {
-    if (!start) return oportunidades;
-    return oportunidades.filter((e) => e.dataSaida === null || e.dataSaida >= start);
-  }, [oportunidades, start]);
+    return oportunidades.filter((e) => {
+      const comecouAntesDoFim = !end || e.dataEntrada <= end;
+      const terminouDepoisDoInicio = e.dataSaida === null || !start || e.dataSaida >= start;
+      return comecouAntesDoFim && terminouDepoisDoInicio;
+    });
+  }, [oportunidades, start, end]);
 
   return (
     <div>
       <div className="mb-6 rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow-card)]">
-        <div className="mb-4 flex items-center justify-end gap-1">
+        <div className="mb-4 flex flex-wrap items-center justify-end gap-x-1 gap-y-2">
+          {range === "CUSTOM" && (
+            <div className="mr-auto flex items-center gap-2 text-xs text-ink-muted">
+              <input
+                type="date"
+                value={customStart || dataMin || ""}
+                min={dataMin ?? undefined}
+                max={customEnd || dataMax || undefined}
+                onChange={(e) => setCustomStart(e.target.value)}
+                className="rounded-md border border-border-strong bg-surface-raised px-2 py-1 text-ink-secondary outline-none focus:border-series"
+              />
+              <span>até</span>
+              <input
+                type="date"
+                value={customEnd || dataMax || ""}
+                min={customStart || dataMin || undefined}
+                max={dataMax ?? undefined}
+                onChange={(e) => setCustomEnd(e.target.value)}
+                className="rounded-md border border-border-strong bg-surface-raised px-2 py-1 text-ink-secondary outline-none focus:border-series"
+              />
+            </div>
+          )}
           {RANGE_OPTIONS.map((opt) => (
             <button
               key={opt.key}
