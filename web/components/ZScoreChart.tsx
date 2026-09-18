@@ -88,8 +88,18 @@ export function ZScoreChart({
     });
 
   const values = points.map((p) => p.z_score);
-  const yMax = Math.max(...values, ENTRY_THRESHOLD) + 0.3;
-  const yMin = Math.min(...values, -ENTRY_THRESHOLD) - 0.3;
+  // Arredonda pra baixo/cima em passos de 0.1 — o domínio do eixo Y nunca
+  // deve carregar a precisão de ponto flutuante bruta de um z_score (ex:
+  // 1.2623710221725113), senão o gerador automático de ticks do Recharts
+  // pode produzir rótulos absurdos a partir dessas casas decimais.
+  const yMax = Math.ceil((Math.max(...values, ENTRY_THRESHOLD) + 0.3) * 10) / 10;
+  const yMin = Math.floor((Math.min(...values, -ENTRY_THRESHOLD) - 0.3) * 10) / 10;
+
+  // Ticks explícitos: sempre mostra os dois limiares (entrada/saída, nos
+  // dois sinais) como rótulo numérico exato, além dos extremos do gráfico.
+  const yTicks = Array.from(
+    new Set([yMin, -ENTRY_THRESHOLD, -EXIT_THRESHOLD, 0, EXIT_THRESHOLD, ENTRY_THRESHOLD, yMax])
+  ).sort((a, b) => a - b);
 
   return (
     <div>
@@ -136,10 +146,12 @@ export function ZScoreChart({
           />
           <YAxis
             domain={[yMin, yMax]}
+            ticks={yTicks}
+            tickFormatter={(v: number) => v.toFixed(2)}
             tick={{ fill: colors.inkMuted, fontSize: 11 }}
             axisLine={false}
             tickLine={false}
-            width={36}
+            width={40}
           />
 
           <Tooltip content={<ChartTooltip />} cursor={{ stroke: colors.baseline, strokeWidth: 1 }} />

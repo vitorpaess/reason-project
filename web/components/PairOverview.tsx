@@ -7,6 +7,7 @@ import type { PairStatus } from "@/lib/pairs-data";
 import { StatCard } from "@/components/StatCard";
 import { StatusPill } from "@/components/StatusPill";
 import { PositionControl } from "@/components/PositionControl";
+import { ThresholdProgress } from "@/components/ThresholdProgress";
 import { PairChartSection } from "@/components/PairChartSection";
 
 function formatDate(iso: string): string {
@@ -64,6 +65,7 @@ export function PairOverview({
               <span className="text-xl font-semibold tabular-nums text-ink-primary">
                 {status.ultimo.z_score?.toFixed(2)}
               </span>
+              <ThresholdProgress z={status.ultimo.z_score as number} estado={status.estado} />
             </StatCard>
 
             <StatCard
