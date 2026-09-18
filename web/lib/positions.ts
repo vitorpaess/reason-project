@@ -1,7 +1,6 @@
 import "server-only";
 import { supabase } from "./supabase";
 import { ENTRY_THRESHOLD } from "./config";
-import type { SignalEvent } from "./pairs-data";
 
 export type ManualPosition = {
   id: number;
@@ -15,28 +14,6 @@ export type ManualPosition = {
 
 const TABLE = "posicoes_manuais";
 
-export async function getPositionHistory(par: string): Promise<SignalEvent[]> {
-  const { data, error } = await supabase()
-    .from(TABLE)
-    .select("data_entrada,z_entrada,direcao,data_saida,z_saida")
-    .eq("par", par)
-    .order("data_entrada", { ascending: false });
-
-  if (error) {
-    throw new Error(`Falha ao ler ${TABLE} para ${par}: ${error.message}`);
-  }
-
-  const hoje = new Date().toISOString().slice(0, 10);
-  return (data ?? []).map((row) => ({
-    dataEntrada: row.data_entrada,
-    zEntrada: row.z_entrada,
-    direcao: row.direcao,
-    dataSaida: row.data_saida,
-    zSaida: row.z_saida,
-    diasEmAberto: daysBetween(row.data_entrada, row.data_saida ?? hoje),
-  }));
-}
-
 export async function getOpenPosition(par: string): Promise<ManualPosition | null> {
   const { data, error } = await supabase()
     .from(TABLE)
@@ -49,11 +26,6 @@ export async function getOpenPosition(par: string): Promise<ManualPosition | nul
     throw new Error(`Falha ao ler posição aberta de ${par}: ${error.message}`);
   }
   return data as ManualPosition | null;
-}
-
-function daysBetween(a: string, b: string): number {
-  const msPerDay = 1000 * 60 * 60 * 24;
-  return Math.round((new Date(b).getTime() - new Date(a).getTime()) / msPerDay);
 }
 
 function direcaoParaZ(par: string, z: number): string {

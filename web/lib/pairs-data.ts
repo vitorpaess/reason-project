@@ -1,7 +1,7 @@
 import "server-only";
 import { supabase } from "./supabase";
 import { ENTRY_THRESHOLD, EXIT_THRESHOLD } from "./config";
-import { getPositionHistory } from "./positions";
+import { getOpenPosition } from "./positions";
 
 export type ZScoreRow = {
   data: string; // ISO date
@@ -36,8 +36,8 @@ export type PairStatus = {
   rows: ZScoreRow[];
   ultimo: ZScoreRow | null;
   estado: Estado | null; // null = histórico insuficiente (sem z-score ainda)
-  openPosition: SignalEvent | null;
-  historico: SignalEvent[]; // posições confirmadas (abertas e fechadas), mais recente primeiro
+  openPosition: SignalEvent | null; // posição confirmada em aberto (define o status atual)
+  oportunidades: SignalEvent[]; // TODO cruzamento de limiar já ocorrido, mais recente primeiro
 };
 
 export async function fetchZScoreRows(par: string): Promise<ZScoreRow[]> {
@@ -60,13 +60,71 @@ export async function getLatestZScore(par: string): Promise<number | null> {
   return validas[validas.length - 1].z_score;
 }
 
+function daysBetween(a: string, b: string): number {
+  const msPerDay = 1000 * 60 * 60 * 24;
+  return Math.round((new Date(b).getTime() - new Date(a).getTime()) / msPerDay);
+}
+
+/**
+ * Todas as oportunidades matemáticas já ocorridas (todo cruzamento de
+ * limiar registrado em pares_zscore.sinal pelo compute_zscore.py) —
+ * independente de o usuário ter confirmado entrada/saída ou não.
+ */
+export function buildOpportunityHistory(rows: ZScoreRow[]): SignalEvent[] {
+  const eventos = rows.filter((r) => r.sinal === "entrada" || r.sinal === "saida");
+  const oportunidades: SignalEvent[] = [];
+  let entradaAtual: ZScoreRow | null = null;
+
+  for (const row of eventos) {
+    if (row.sinal === "entrada") {
+      entradaAtual = row;
+    } else if (row.sinal === "saida" && entradaAtual) {
+      oportunidades.push({
+        dataEntrada: entradaAtual.data,
+        zEntrada: entradaAtual.z_score as number,
+        direcao: entradaAtual.direcao,
+        dataSaida: row.data,
+        zSaida: row.z_score,
+        diasEmAberto: daysBetween(entradaAtual.data, row.data),
+      });
+      entradaAtual = null;
+    }
+  }
+
+  if (entradaAtual) {
+    const hoje = new Date().toISOString().slice(0, 10);
+    oportunidades.push({
+      dataEntrada: entradaAtual.data,
+      zEntrada: entradaAtual.z_score as number,
+      direcao: entradaAtual.direcao,
+      dataSaida: null,
+      zSaida: null,
+      diasEmAberto: daysBetween(entradaAtual.data, hoje),
+    });
+  }
+
+  return oportunidades.reverse();
+}
+
 export async function getPairStatus(par: string): Promise<PairStatus> {
   const rows = await fetchZScoreRows(par);
   const validas = rows.filter((r) => r.z_score !== null);
   const ultimo = validas.length > 0 ? validas[validas.length - 1] : null;
 
-  const historico = await getPositionHistory(par);
-  const openPosition = historico.find((e) => e.dataSaida === null) ?? null;
+  const manual = await getOpenPosition(par);
+  const hoje = new Date().toISOString().slice(0, 10);
+  const openPosition: SignalEvent | null = manual
+    ? {
+        dataEntrada: manual.data_entrada,
+        zEntrada: manual.z_entrada,
+        direcao: manual.direcao,
+        dataSaida: null,
+        zSaida: null,
+        diasEmAberto: daysBetween(manual.data_entrada, hoje),
+      }
+    : null;
+
+  const oportunidades = buildOpportunityHistory(rows);
 
   let estado: Estado | null = null;
   if (ultimo) {
@@ -78,5 +136,5 @@ export async function getPairStatus(par: string): Promise<PairStatus> {
     }
   }
 
-  return { rows, ultimo, estado, openPosition, historico };
+  return { rows, ultimo, estado, openPosition, oportunidades };
 }

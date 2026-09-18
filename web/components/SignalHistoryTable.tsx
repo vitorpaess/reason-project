@@ -5,9 +5,9 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-export function SignalHistoryTable({ historico }: { historico: SignalEvent[] }) {
-  if (historico.length === 0) {
-    return <p className="text-sm text-ink-muted">Nenhuma posição confirmada ainda.</p>;
+export function SignalHistoryTable({ oportunidades }: { oportunidades: SignalEvent[] }) {
+  if (oportunidades.length === 0) {
+    return <p className="text-sm text-ink-muted">Nenhuma oportunidade ainda.</p>;
   }
 
   return (
@@ -20,11 +20,11 @@ export function SignalHistoryTable({ historico }: { historico: SignalEvent[] }) 
             <th className="px-4 py-2.5 font-medium">Direção</th>
             <th className="px-4 py-2.5 font-medium">Saída</th>
             <th className="px-4 py-2.5 font-medium">z saída</th>
-            <th className="px-4 py-2.5 text-right font-medium">Dias em aberto</th>
+            <th className="px-4 py-2.5 text-right font-medium">Duração</th>
           </tr>
         </thead>
         <tbody>
-          {historico.map((evento, i) => (
+          {oportunidades.map((evento, i) => (
             <tr
               key={`${evento.dataEntrada}-${i}`}
               className="border-b border-border bg-surface last:border-b-0"

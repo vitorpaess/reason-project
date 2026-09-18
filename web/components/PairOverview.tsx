@@ -83,7 +83,7 @@ export function PairOverview({
             </StatCard>
           </div>
 
-          <PairChartSection rows={status.rows} historico={status.historico} />
+          <PairChartSection rows={status.rows} oportunidades={status.oportunidades} />
         </>
       )}
     </div>

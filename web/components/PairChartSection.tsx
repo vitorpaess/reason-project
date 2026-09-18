@@ -8,10 +8,10 @@ import { SignalHistoryTable } from "@/components/SignalHistoryTable";
 
 export function PairChartSection({
   rows,
-  historico,
+  oportunidades,
 }: {
   rows: ZScoreRow[];
-  historico: SignalEvent[];
+  oportunidades: SignalEvent[];
 }) {
   const [range, setRange] = useState<RangeKey>("TUDO");
 
@@ -23,13 +23,13 @@ export function PairChartSection({
     return rows.filter((r) => r.data >= start);
   }, [rows, start]);
 
-  // Um sinal "pertence" ao período filtrado se ainda está aberto (segue
-  // relevante até hoje) ou se foi encerrado dentro da janela — mesmo que a
-  // entrada tenha sido antes do início do período.
-  const filteredHistorico = useMemo(() => {
-    if (!start) return historico;
-    return historico.filter((e) => e.dataSaida === null || e.dataSaida >= start);
-  }, [historico, start]);
+  // Uma oportunidade "pertence" ao período filtrado se ainda está em
+  // aberto (segue relevante até hoje) ou se foi encerrada dentro da
+  // janela — mesmo que tenha começado antes do início do período.
+  const filteredOportunidades = useMemo(() => {
+    if (!start) return oportunidades;
+    return oportunidades.filter((e) => e.dataSaida === null || e.dataSaida >= start);
+  }, [oportunidades, start]);
 
   return (
     <div>
@@ -56,13 +56,13 @@ export function PairChartSection({
             Sem dados no período selecionado.
           </p>
         ) : (
-          <ZScoreChart rows={filteredRows} events={filteredHistorico} />
+          <ZScoreChart rows={filteredRows} events={filteredOportunidades} />
         )}
       </div>
 
       <div>
-        <h2 className="mb-3 text-sm font-semibold text-ink-secondary">Histórico de posições</h2>
-        <SignalHistoryTable historico={filteredHistorico} />
+        <h2 className="mb-3 text-sm font-semibold text-ink-secondary">Histórico de oportunidades</h2>
+        <SignalHistoryTable oportunidades={filteredOportunidades} />
       </div>
     </div>
   );
