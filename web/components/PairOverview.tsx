@@ -25,6 +25,8 @@ export function PairOverview({
   /** Se informado, mostra um link "Ver detalhes" (uso na visão geral /dashboard). */
   detailHref?: string;
 }) {
+  const statusPronto = status.estado !== null && status.ultimo !== null;
+
   return (
     <div>
       <div className="mb-7 flex items-center justify-between">
@@ -43,50 +45,64 @@ export function PairOverview({
         )}
       </div>
 
-      {status.estado === null || !status.ultimo ? (
-        <div className="rounded-xl border border-border bg-surface p-5 text-sm text-ink-secondary">
-          Histórico insuficiente ainda para calcular z-score/correlação (janela de{" "}
-          {ROLLING_WINDOW_DAYS} dias). Aguarde mais coletas diárias.
+      {statusPronto && status.ultimo ? (
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Status" detail={<StatusDetail status={status} />}>
+            <StatusPill label={statusLabel[status.estado!]} color={statusColor(status.estado!)} />
+            {status.estado === "oportunidade_entrada" && (
+              <PositionControl par={pairDef.label} action="entrar" />
+            )}
+            {status.estado === "oportunidade_saida" && (
+              <PositionControl par={pairDef.label} action="sair" />
+            )}
+          </StatCard>
+
+          <StatCard label="Z-score atual (63d)">
+            <span className="text-xl font-semibold tabular-nums text-ink-primary">
+              {status.ultimo.z_score_63d?.toFixed(2)}
+            </span>
+            <ThresholdProgress z={status.ultimo.z_score_63d as number} estado={status.estado!} />
+          </StatCard>
+
+          <StatCard
+            label={`Correlação móvel ${ROLLING_WINDOW_DAYS}d`}
+            detail={
+              status.ultimo.correlacao_movel_63d !== null &&
+              Math.abs(status.ultimo.correlacao_movel_63d) < 0.5
+                ? "Correlação baixa — par pode estar perdendo a relação estatística."
+                : undefined
+            }
+          >
+            <span className="text-xl font-semibold tabular-nums text-ink-primary">
+              {status.ultimo.correlacao_movel_63d !== null
+                ? status.ultimo.correlacao_movel_63d.toFixed(2)
+                : "N/D"}
+            </span>
+          </StatCard>
+
+          <StatCard
+            label="Correlação total"
+            detail="Desde o primeiro dia coletado — pra comparar com a janela de 63d ao lado."
+          >
+            <span className="text-xl font-semibold tabular-nums text-ink-primary">
+              {status.ultimo.correlacao_expansiva !== null
+                ? status.ultimo.correlacao_expansiva.toFixed(2)
+                : "N/D"}
+            </span>
+          </StatCard>
         </div>
       ) : (
-        <>
-          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <StatCard label="Status" detail={<StatusDetail status={status} />}>
-              <StatusPill label={statusLabel[status.estado]} color={statusColor(status.estado)} />
-              {status.estado === "oportunidade_entrada" && (
-                <PositionControl par={pairDef.label} action="entrar" />
-              )}
-              {status.estado === "oportunidade_saida" && (
-                <PositionControl par={pairDef.label} action="sair" />
-              )}
-            </StatCard>
+        <div className="mb-6 rounded-xl border border-border bg-surface p-5 text-sm text-ink-secondary">
+          Histórico insuficiente ainda para o cálculo oficial (janela de {ROLLING_WINDOW_DAYS} dias)
+          — status e sinais de entrada/saída aparecem aqui assim que houver dias suficientes. O
+          gráfico abaixo já mostra o que der com os dias disponíveis.
+        </div>
+      )}
 
-            <StatCard label="Z-score atual">
-              <span className="text-xl font-semibold tabular-nums text-ink-primary">
-                {status.ultimo.z_score?.toFixed(2)}
-              </span>
-              <ThresholdProgress z={status.ultimo.z_score as number} estado={status.estado} />
-            </StatCard>
-
-            <StatCard
-              label={`Correlação móvel ${ROLLING_WINDOW_DAYS}d`}
-              detail={
-                status.ultimo.correlacao_movel_63d !== null &&
-                Math.abs(status.ultimo.correlacao_movel_63d) < 0.5
-                  ? "Correlação baixa — par pode estar perdendo a relação estatística."
-                  : undefined
-              }
-            >
-              <span className="text-xl font-semibold tabular-nums text-ink-primary">
-                {status.ultimo.correlacao_movel_63d !== null
-                  ? status.ultimo.correlacao_movel_63d.toFixed(2)
-                  : "N/D"}
-              </span>
-            </StatCard>
-          </div>
-
-          <PairChartSection rows={status.rows} oportunidades={status.oportunidades} />
-        </>
+      {status.temSerieExpansiva ? (
+        <PairChartSection rows={status.rows} oportunidades={status.oportunidades} />
+      ) : (
+        <p className="text-sm text-ink-muted">Sem dados suficientes pro gráfico ainda.</p>
       )}
     </div>
   );

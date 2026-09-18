@@ -15,7 +15,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       return {
         slug: pair.slug,
         label: pair.label,
-        zScore: status.ultimo?.z_score ?? null,
+        zScore: status.ultimo?.z_score_63d ?? null,
         estado: status.estado,
       };
     })

@@ -19,7 +19,8 @@ type Marker = "entrada" | "saida" | "nenhum";
 
 type ChartPoint = {
   data: string;
-  z_score: number;
+  z_expansivo: number;
+  z_63d: number | null;
   marker: Marker;
 };
 
@@ -53,7 +54,10 @@ function ChartTooltip({
     >
       <div className="text-ink-muted">{formatDate(point.data)}</div>
       <div className="mt-0.5 font-semibold tabular-nums text-ink-primary">
-        z = {point.z_score.toFixed(2)}
+        z histórico = {point.z_expansivo.toFixed(2)}
+      </div>
+      <div className="tabular-nums text-ink-muted">
+        z oficial (63d) = {point.z_63d !== null ? point.z_63d.toFixed(2) : "N/D"}
       </div>
       {point.marker !== "nenhum" && (
         <div
@@ -72,22 +76,30 @@ export function ZScoreChart({
   events = [],
 }: {
   rows: ZScoreRow[];
-  /** Posições confirmadas pelo usuário — marcam os pontos de entrada/saída reais no gráfico. */
+  /** Oportunidades oficiais (63d) — marcam os pontos de entrada/saída no gráfico. */
   events?: SignalEvent[];
 }) {
   const entryDates = new Set(events.map((e) => e.dataEntrada));
   const exitDates = new Set(events.filter((e) => e.dataSaida).map((e) => e.dataSaida as string));
 
+  // A linha plotada é sempre o z-score expansivo (histórico) — cobre
+  // desde o início dos dados, diferente do card "Z-score atual" no topo
+  // (que usa a janela móvel de 63 dias, o cálculo oficial).
   const points: ChartPoint[] = rows
-    .filter((r) => r.z_score !== null)
+    .filter((r) => r.z_score_expansivo !== null)
     .map((r) => {
       let marker: Marker = "nenhum";
       if (entryDates.has(r.data)) marker = "entrada";
       else if (exitDates.has(r.data)) marker = "saida";
-      return { data: r.data, z_score: r.z_score as number, marker };
+      return {
+        data: r.data,
+        z_expansivo: r.z_score_expansivo as number,
+        z_63d: r.z_score_63d,
+        marker,
+      };
     });
 
-  const values = points.map((p) => p.z_score);
+  const values = points.map((p) => p.z_expansivo);
   // Arredonda pra baixo/cima em passos de 0.1 — o domínio do eixo Y nunca
   // deve carregar a precisão de ponto flutuante bruta de um z_score (ex:
   // 1.2623710221725113), senão o gerador automático de ticks do Recharts
@@ -103,6 +115,15 @@ export function ZScoreChart({
 
   return (
     <div>
+      <div className="mb-3 flex items-center gap-1.5 text-xs text-ink-muted">
+        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: colors.seriesZScore }} />
+        <span>
+          Z-score histórico (janela expansiva, todos os dias) — diferente do{" "}
+          <span className="text-ink-secondary">z-score atual (janela móvel 63d)</span> mostrado no
+          card acima
+        </span>
+      </div>
+
       <ResponsiveContainer width="100%" height={380}>
         <ComposedChart data={points} margin={{ top: 12, right: 12, bottom: 0, left: 0 }}>
           <defs>
@@ -158,7 +179,7 @@ export function ZScoreChart({
 
           <Area
             type="monotone"
-            dataKey="z_score"
+            dataKey="z_expansivo"
             stroke={colors.seriesZScore}
             strokeWidth={2.5}
             fill="url(#zscore-fill)"
