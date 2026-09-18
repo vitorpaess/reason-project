@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LineChart, LogOut } from "lucide-react";
+import { LayoutGrid, LineChart, LogOut } from "lucide-react";
 import { statusColor, statusLabel, colors } from "@/lib/theme";
 import { PairIcon } from "@/lib/pair-icons";
 import type { Estado } from "@/lib/pairs-data";
@@ -26,6 +26,30 @@ export function Sidebar({ pairs }: { pairs: SidebarPair[] }) {
       <p className="mb-4 px-2.5 text-xs text-ink-muted">Monitoramento diário</p>
 
       <nav className="flex flex-col gap-0.5">
+        <Link
+          href="/dashboard"
+          className={`mb-3 flex items-center gap-2 rounded-lg px-2.5 py-2 transition-colors ${
+            pathname === "/dashboard" ? "bg-surface-raised" : "hover:bg-surface"
+          }`}
+        >
+          <LayoutGrid
+            size={15}
+            strokeWidth={1.75}
+            className={pathname === "/dashboard" ? "text-ink-primary" : "text-ink-muted"}
+          />
+          <span
+            className={`text-sm font-medium ${
+              pathname === "/dashboard" ? "text-ink-primary" : "text-ink-secondary"
+            }`}
+          >
+            Dashboard
+          </span>
+        </Link>
+
+        <p className="mb-1 px-2.5 text-xs font-medium uppercase tracking-wide text-ink-muted">
+          Pares
+        </p>
+
         {pairs.map((pair) => {
           const active = pathname === `/pair/${pair.slug}`;
           return (
