@@ -6,8 +6,7 @@ import { PairIcon } from "@/lib/pair-icons";
 import type { PairStatus } from "@/lib/pairs-data";
 import { StatCard } from "@/components/StatCard";
 import { StatusPill } from "@/components/StatusPill";
-import { ZScoreChart } from "@/components/ZScoreChart";
-import { SignalHistoryTable } from "@/components/SignalHistoryTable";
+import { PairChartSection } from "@/components/PairChartSection";
 
 function formatDate(iso: string): string {
   const d = new Date(iso + "T00:00:00");
@@ -77,14 +76,7 @@ export function PairOverview({
             </StatCard>
           </div>
 
-          <div className="mb-6 rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow-card)]">
-            <ZScoreChart rows={status.rows} />
-          </div>
-
-          <div>
-            <h2 className="mb-3 text-sm font-semibold text-ink-secondary">Histórico de sinais</h2>
-            <SignalHistoryTable historico={status.historico} />
-          </div>
+          <PairChartSection rows={status.rows} historico={status.historico} />
         </>
       )}
     </div>
