@@ -7,7 +7,7 @@ function formatDate(iso: string): string {
 
 export function SignalHistoryTable({ historico }: { historico: SignalEvent[] }) {
   if (historico.length === 0) {
-    return <p className="text-sm text-ink-muted">Nenhum sinal de entrada/saída disparado ainda.</p>;
+    return <p className="text-sm text-ink-muted">Nenhuma posição confirmada ainda.</p>;
   }
 
   return (

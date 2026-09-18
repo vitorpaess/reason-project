@@ -13,12 +13,14 @@ import {
 import type { DotProps } from "recharts";
 import { colors } from "@/lib/theme";
 import { ENTRY_THRESHOLD, EXIT_THRESHOLD } from "@/lib/config";
-import type { ZScoreRow } from "@/lib/pairs-data";
+import type { SignalEvent, ZScoreRow } from "@/lib/pairs-data";
+
+type Marker = "entrada" | "saida" | "nenhum";
 
 type ChartPoint = {
   data: string;
   z_score: number;
-  sinal: ZScoreRow["sinal"];
+  marker: Marker;
 };
 
 function formatDate(iso: string): string {
@@ -28,10 +30,10 @@ function formatDate(iso: string): string {
 
 function EventDot(props: DotProps & { payload?: ChartPoint }) {
   const { cx, cy, payload } = props;
-  if (!payload || payload.sinal === "nenhum" || cx === undefined || cy === undefined) {
+  if (!payload || payload.marker === "nenhum" || cx === undefined || cy === undefined) {
     return <g />;
   }
-  const color = payload.sinal === "entrada" ? colors.statusCritical : colors.statusGood;
+  const color = payload.marker === "entrada" ? colors.statusCritical : colors.statusGood;
   return <circle cx={cx} cy={cy} r={5} fill={color} stroke={colors.surface} strokeWidth={1.5} />;
 }
 
@@ -53,22 +55,37 @@ function ChartTooltip({
       <div className="mt-0.5 font-semibold tabular-nums text-ink-primary">
         z = {point.z_score.toFixed(2)}
       </div>
-      {point.sinal !== "nenhum" && (
+      {point.marker !== "nenhum" && (
         <div
           className="mt-0.5 font-medium"
-          style={{ color: point.sinal === "entrada" ? colors.statusCritical : colors.statusGood }}
+          style={{ color: point.marker === "entrada" ? colors.statusCritical : colors.statusGood }}
         >
-          {point.sinal === "entrada" ? "Entrada" : "Saída"}
+          {point.marker === "entrada" ? "Entrada confirmada" : "Saída confirmada"}
         </div>
       )}
     </div>
   );
 }
 
-export function ZScoreChart({ rows }: { rows: ZScoreRow[] }) {
+export function ZScoreChart({
+  rows,
+  events = [],
+}: {
+  rows: ZScoreRow[];
+  /** Posições confirmadas pelo usuário — marcam os pontos de entrada/saída reais no gráfico. */
+  events?: SignalEvent[];
+}) {
+  const entryDates = new Set(events.map((e) => e.dataEntrada));
+  const exitDates = new Set(events.filter((e) => e.dataSaida).map((e) => e.dataSaida as string));
+
   const points: ChartPoint[] = rows
     .filter((r) => r.z_score !== null)
-    .map((r) => ({ data: r.data, z_score: r.z_score as number, sinal: r.sinal }));
+    .map((r) => {
+      let marker: Marker = "nenhum";
+      if (entryDates.has(r.data)) marker = "entrada";
+      else if (exitDates.has(r.data)) marker = "saida";
+      return { data: r.data, z_score: r.z_score as number, marker };
+    });
 
   const values = points.map((p) => p.z_score);
   const yMax = Math.max(...values, ENTRY_THRESHOLD) + 0.3;

@@ -56,12 +56,12 @@ export function PairChartSection({
             Sem dados no período selecionado.
           </p>
         ) : (
-          <ZScoreChart rows={filteredRows} />
+          <ZScoreChart rows={filteredRows} events={filteredHistorico} />
         )}
       </div>
 
       <div>
-        <h2 className="mb-3 text-sm font-semibold text-ink-secondary">Histórico de sinais</h2>
+        <h2 className="mb-3 text-sm font-semibold text-ink-secondary">Histórico de posições</h2>
         <SignalHistoryTable historico={filteredHistorico} />
       </div>
     </div>

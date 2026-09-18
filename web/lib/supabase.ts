@@ -13,13 +13,18 @@ function requiredEnv(name: string): string {
   return value;
 }
 
-let _client: ReturnType<typeof createClient> | null = null;
+// Sem schema gerado do Supabase: usamos o client tipado como `any` de
+// propósito (createClient<any>) — sem isso, alguns métodos (insert/update)
+// resolvem o tipo da linha como `never` em vez de aceitar o payload.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _client: ReturnType<typeof createClient<any>> | null = null;
 
 export function supabase() {
   if (!_client) {
     const url = requiredEnv("SUPABASE_URL").replace(/\/rest\/v1\/?$/, "");
     const key = requiredEnv("SUPABASE_KEY");
-    _client = createClient(url, key, {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    _client = createClient<any>(url, key, {
       auth: { persistSession: false },
     });
   }

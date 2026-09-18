@@ -6,6 +6,7 @@ import { PairIcon } from "@/lib/pair-icons";
 import type { PairStatus } from "@/lib/pairs-data";
 import { StatCard } from "@/components/StatCard";
 import { StatusPill } from "@/components/StatusPill";
+import { PositionControl } from "@/components/PositionControl";
 import { PairChartSection } from "@/components/PairChartSection";
 
 function formatDate(iso: string): string {
@@ -51,6 +52,12 @@ export function PairOverview({
           <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <StatCard label="Status" detail={<StatusDetail status={status} />}>
               <StatusPill label={statusLabel[status.estado]} color={statusColor(status.estado)} />
+              {status.estado === "oportunidade_entrada" && (
+                <PositionControl par={pairDef.label} action="entrar" />
+              )}
+              {status.estado === "oportunidade_saida" && (
+                <PositionControl par={pairDef.label} action="sair" />
+              )}
             </StatCard>
 
             <StatCard label="Z-score atual">
@@ -84,19 +91,22 @@ export function PairOverview({
 }
 
 function StatusDetail({ status }: { status: PairStatus }) {
-  if (status.estado === "aberta" && status.historico[0]) {
-    const e = status.historico[0];
+  if (status.estado === "oportunidade_entrada") {
+    return <span>|z| passou de {ENTRY_THRESHOLD.toFixed(2)} — confirme se entrou na operação</span>;
+  }
+  if (status.estado === "em_operacao" && status.openPosition) {
+    const e = status.openPosition;
     return (
       <span>
         desde {formatDate(e.dataEntrada)} ({e.diasEmAberto}d) — {e.direcao}
       </span>
     );
   }
-  if (status.estado === "saida" && status.historico[0]) {
-    const e = status.historico[0];
+  if (status.estado === "oportunidade_saida" && status.openPosition) {
+    const e = status.openPosition;
     return (
       <span>
-        entrada em {formatDate(e.dataEntrada)} (z {e.zEntrada.toFixed(2)}) → saída hoje
+        entrada em {formatDate(e.dataEntrada)} ({e.diasEmAberto}d) — |z| voltou pra zona de saída
       </span>
     );
   }

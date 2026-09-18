@@ -26,13 +26,20 @@ export function hexToRgba(hex: string, alpha: number): string {
 }
 
 export const statusLabel: Record<string, string> = {
-  aberta: "Posição aberta",
-  saida: "Posição de saída",
-  espera: "Posição de espera",
+  oportunidade_entrada: "Oportunidade de entrada",
+  oportunidade_saida: "Oportunidade de saída",
+  em_operacao: "Em operação",
+  espera: "Aguardando",
 };
 
+// oportunidade_entrada = vermelho (mesma cor da zona de entrada no gráfico)
+// oportunidade_saida   = verde (mesma cor da zona de saída no gráfico)
+// em_operacao          = azul (informativo: posicionado, mas ainda não é
+//                        hora de considerar sair)
+// espera               = cinza (nada a fazer agora)
 export function statusColor(estado: string): string {
-  if (estado === "aberta") return colors.statusCritical;
-  if (estado === "saida") return colors.statusGood;
+  if (estado === "oportunidade_entrada") return colors.statusCritical;
+  if (estado === "oportunidade_saida") return colors.statusGood;
+  if (estado === "em_operacao") return colors.seriesZScore;
   return colors.inkMuted;
 }
