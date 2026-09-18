@@ -25,11 +25,6 @@ export function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-export const pairIcon: Record<string, string> = {
-  "RKLB-PL": "🚀",
-  "RPD-TENB": "🛡️",
-};
-
 export const statusLabel: Record<string, string> = {
   aberta: "Posição aberta",
   saida: "Posição de saída",

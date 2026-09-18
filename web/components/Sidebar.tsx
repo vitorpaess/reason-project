@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { statusColor, statusLabel } from "@/lib/theme";
+import { LineChart, LogOut } from "lucide-react";
+import { statusColor, statusLabel, colors } from "@/lib/theme";
+import { PairIcon } from "@/lib/pair-icons";
 import type { Estado } from "@/lib/pairs-data";
 
 export type SidebarPair = {
   slug: string;
   label: string;
-  icon: string;
   zScore: number | null;
   estado: Estado | null;
 };
@@ -19,7 +20,7 @@ export function Sidebar({ pairs }: { pairs: SidebarPair[] }) {
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-border bg-page px-3 py-5">
       <div className="mb-1 flex items-center gap-2 px-2.5 py-1.5">
-        <span className="text-base">📈</span>
+        <LineChart size={16} strokeWidth={1.75} color={colors.seriesZScore} />
         <span className="text-sm font-semibold text-ink-primary">Pairs Trading</span>
       </div>
       <p className="mb-4 px-2.5 text-xs text-ink-muted">Monitoramento diário</p>
@@ -38,7 +39,7 @@ export function Sidebar({ pairs }: { pairs: SidebarPair[] }) {
               }`}
             >
               <div className="flex items-center gap-2">
-                <span className="text-sm">{pair.icon}</span>
+                <PairIcon slug={pair.slug} size={8} muted={!active} />
                 <span
                   className={`text-sm font-medium ${
                     active ? "text-ink-primary" : "text-ink-secondary group-hover:text-ink-primary"
@@ -85,8 +86,9 @@ function LogoutButton() {
     <button
       type="button"
       onClick={handleLogout}
-      className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink-secondary"
+      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink-secondary"
     >
+      <LogOut size={13} strokeWidth={1.75} />
       Sair
     </button>
   );

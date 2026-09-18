@@ -1,6 +1,5 @@
 import { PAIRS } from "@/lib/config";
 import { getPairStatus } from "@/lib/pairs-data";
-import { pairIcon } from "@/lib/theme";
 import { Sidebar, type SidebarPair } from "@/components/Sidebar";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +11,6 @@ export default async function PairLayout({ children }: LayoutProps<"/pair">) {
       return {
         slug: pair.slug,
         label: pair.label,
-        icon: pairIcon[pair.slug] ?? "",
         zScore: status.ultimo?.z_score ?? null,
         estado: status.estado,
       };

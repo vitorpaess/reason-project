@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { ENTRY_THRESHOLD, ROLLING_WINDOW_DAYS, pairBySlug } from "@/lib/config";
 import { getPairStatus } from "@/lib/pairs-data";
-import { pairIcon, statusColor, statusLabel } from "@/lib/theme";
+import { statusColor, statusLabel } from "@/lib/theme";
+import { PairIcon } from "@/lib/pair-icons";
 import { StatCard } from "@/components/StatCard";
 import { StatusPill } from "@/components/StatusPill";
 import { ZScoreChart } from "@/components/ZScoreChart";
@@ -27,7 +28,7 @@ export default async function PairPage({ params }: PageProps<"/pair/[pair]">) {
   return (
     <div>
       <div className="mb-7 flex items-center gap-2.5">
-        <span className="text-2xl">{pairIcon[pairDef.slug]}</span>
+        <PairIcon slug={pairDef.slug} size={10} />
         <h1 className="text-xl font-semibold text-ink-primary">{pairDef.label}</h1>
       </div>
 
