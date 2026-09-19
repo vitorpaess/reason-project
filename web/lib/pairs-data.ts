@@ -20,27 +20,18 @@ export type ZScoreRow = {
 };
 
 export type SignalEvent = {
-  /** Momento estimado (interpolado) do cruzamento do limiar, não o dia de
-   * fechamento bruto — pode cair num dia diferente do dia de referência. */
   dataEntrada: string;
-  /** Hora aproximada (0-23) do cruzamento interpolado; null quando não deu
-   * pra interpolar (cai no valor bruto do dia de referência). */
-  horaEntrada: number | null;
-  /** Dia real de pregão em que o cruzamento foi detectado — usado só para
-   * posicionar o marcador no gráfico (sempre um dia com dado real). */
-  diaReferenciaEntrada: string;
-  /** Valor exato do limiar (1.20/-1.20) quando interpolado; o valor bruto
-   * observado quando não deu pra interpolar. */
+  /** Valor de z realmente observado no fechamento do dia de entrada
+   * (não um limiar padrão) — pode passar um pouco de 1.20/-1.20, já que
+   * só temos 1 preço por dia e o cruzamento real acontece entre dois
+   * fechamentos. */
   zEntrada: number;
   direcao: string | null;
   dataSaida: string | null;
-  horaSaida: number | null;
-  diaReferenciaSaida: string | null;
+  /** Valor de z realmente observado no fechamento do dia de saída. */
   zSaida: number | null;
-  /** Valor de z mais extremo (com sinal) observado durante a oportunidade,
-   * do fechamento bruto de cada dia (não o limiar interpolado). */
+  /** Valor de z mais extremo (com sinal) observado durante a oportunidade. */
   pico: number;
-  /** Fracionário — reflete a interpolação, não é mais um número inteiro de dias. */
   diasEmAberto: number;
   /** true se entrada ou saída caem no período anterior aos 63 dias
    * oficiais, onde só existe o z-score expansivo (estimativa, não o
@@ -89,15 +80,9 @@ export async function getLatestZScore(par: string): Promise<number | null> {
   return validas[validas.length - 1].z_score_63d;
 }
 
-function toIsoDateLocal(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function fractionalDaysBetween(msA: number, msB: number): number {
-  return Math.round(((msB - msA) / (1000 * 60 * 60 * 24)) * 10) / 10;
+function daysBetween(a: string, b: string): number {
+  const msPerDay = 1000 * 60 * 60 * 24;
+  return Math.round((new Date(b).getTime() - new Date(a).getTime()) / msPerDay);
 }
 
 /** Maior |z| (com sinal) observado desde uma data — usado pra calcular o
@@ -118,40 +103,6 @@ function direcaoParaZ(par: string, z: number): string {
   return z > 0 ? `vender ${a} / comprar ${b}` : `comprar ${a} / vender ${b}`;
 }
 
-type Ponto = { data: string; z: number; oficial: boolean };
-
-type Cruzamento = { ms: number; data: string; hora: number | null; z: number; interpolado: boolean };
-
-/**
- * Estima o momento exato (não só o dia) em que o z-score cruzou um limiar,
- * interpolando linearmente entre o ponto anterior e o atual — já que só
- * temos 1 preço de fechamento por dia, não dá pra observar o cruzamento
- * real, só aproximar assumindo variação linear entre os dois fechamentos.
- * Só interpola quando os dois pontos vêm da mesma série (63d ou
- * expansivo); na fronteira dos 63 dias (onde a série muda), ou quando não
- * há ponto anterior, cai pro valor bruto do dia atual sem interpolar.
- */
-function interpolarCruzamento(anterior: Ponto | null, atual: Ponto, limiar: number): Cruzamento {
-  const msAtual = new Date(atual.data + "T00:00:00").getTime();
-
-  if (!anterior || anterior.oficial !== atual.oficial || anterior.z === atual.z) {
-    return { ms: msAtual, data: atual.data, hora: null, z: atual.z, interpolado: false };
-  }
-
-  const fracao = Math.min(1, Math.max(0, (limiar - anterior.z) / (atual.z - anterior.z)));
-  const msAnterior = new Date(anterior.data + "T00:00:00").getTime();
-  const msInterpolado = msAnterior + fracao * (msAtual - msAnterior);
-  const momento = new Date(msInterpolado);
-
-  return {
-    ms: msInterpolado,
-    data: toIsoDateLocal(momento),
-    hora: momento.getHours(),
-    z: limiar,
-    interpolado: true,
-  };
-}
-
 /**
  * Todas as oportunidades já ocorridas, cobrindo o histórico inteiro — não
  * só o período com os 63 dias oficiais completos. Pra cada dia, usa o
@@ -162,71 +113,53 @@ function interpolarCruzamento(anterior: Ponto | null, atual: Ponto, limiar: numb
  * ficaria invisível no histórico mesmo estando visível no gráfico.
  * Marca essas como "estimada" pra não parecerem sinais oficiais.
  *
- * A entrada/saída não é mais "o dia" em que o limiar foi cruzado, e sim o
- * momento estimado do cruzamento (ver interpolarCruzamento).
+ * Entrada/saída usam o dia real de fechamento e o z realmente observado
+ * naquele dia (pode passar um pouco do limiar — só temos 1 preço por dia).
  */
 export function buildOpportunityHistory(par: string, rows: ZScoreRow[]): SignalEvent[] {
   const oportunidades: SignalEvent[] = [];
   let state: "flat" | "aberta" = "flat";
-  let entradaAtual:
-    | { cruzamento: Cruzamento; diaReferencia: string; estimada: boolean; pico: number }
-    | null = null;
-  let anterior: Ponto | null = null;
+  let entradaAtual: { data: string; z: number; estimada: boolean; pico: number } | null = null;
 
   for (const row of rows) {
     const oficial = row.z_score_63d !== null;
     const z = row.z_score_63d ?? row.z_score_expansivo;
     if (z === null) continue;
-    const atual: Ponto = { data: row.data, z, oficial };
     const az = Math.abs(z);
 
     if (state === "flat" && az > ENTRY_THRESHOLD) {
-      const limiar = z > 0 ? ENTRY_THRESHOLD : -ENTRY_THRESHOLD;
-      const cruzamento = interpolarCruzamento(anterior, atual, limiar);
       state = "aberta";
-      entradaAtual = { cruzamento, diaReferencia: row.data, estimada: !oficial, pico: z };
+      entradaAtual = { data: row.data, z, estimada: !oficial, pico: z };
     } else if (state === "aberta" && entradaAtual) {
       if (Math.abs(z) > Math.abs(entradaAtual.pico)) entradaAtual.pico = z;
 
       if (az < EXIT_THRESHOLD) {
-        const ladoAnterior = anterior ? anterior.z : atual.z;
-        const limiar = ladoAnterior > 0 ? EXIT_THRESHOLD : -EXIT_THRESHOLD;
-        const cruzamentoSaida = interpolarCruzamento(anterior, atual, limiar);
         oportunidades.push({
-          dataEntrada: entradaAtual.cruzamento.data,
-          horaEntrada: entradaAtual.cruzamento.hora,
-          diaReferenciaEntrada: entradaAtual.diaReferencia,
-          zEntrada: entradaAtual.cruzamento.z,
-          direcao: direcaoParaZ(par, entradaAtual.cruzamento.z),
-          dataSaida: cruzamentoSaida.data,
-          horaSaida: cruzamentoSaida.hora,
-          diaReferenciaSaida: row.data,
-          zSaida: cruzamentoSaida.z,
+          dataEntrada: entradaAtual.data,
+          zEntrada: entradaAtual.z,
+          direcao: direcaoParaZ(par, entradaAtual.z),
+          dataSaida: row.data,
+          zSaida: z,
           pico: entradaAtual.pico,
-          diasEmAberto: fractionalDaysBetween(entradaAtual.cruzamento.ms, cruzamentoSaida.ms),
+          diasEmAberto: daysBetween(entradaAtual.data, row.data),
           estimada: entradaAtual.estimada || !oficial,
         });
         state = "flat";
         entradaAtual = null;
       }
     }
-    anterior = atual;
   }
 
   if (entradaAtual) {
-    const agora = Date.now();
+    const hoje = new Date().toISOString().slice(0, 10);
     oportunidades.push({
-      dataEntrada: entradaAtual.cruzamento.data,
-      horaEntrada: entradaAtual.cruzamento.hora,
-      diaReferenciaEntrada: entradaAtual.diaReferencia,
-      zEntrada: entradaAtual.cruzamento.z,
-      direcao: direcaoParaZ(par, entradaAtual.cruzamento.z),
+      dataEntrada: entradaAtual.data,
+      zEntrada: entradaAtual.z,
+      direcao: direcaoParaZ(par, entradaAtual.z),
       dataSaida: null,
-      horaSaida: null,
-      diaReferenciaSaida: null,
       zSaida: null,
       pico: entradaAtual.pico,
-      diasEmAberto: fractionalDaysBetween(entradaAtual.cruzamento.ms, agora),
+      diasEmAberto: daysBetween(entradaAtual.data, hoje),
       estimada: entradaAtual.estimada,
     });
   }
@@ -241,22 +174,16 @@ export async function getPairStatus(par: string): Promise<PairStatus> {
   const temSerieExpansiva = rows.some((r) => r.z_score_expansivo !== null);
 
   const manual = await getOpenPosition(par);
+  const hoje = new Date().toISOString().slice(0, 10);
   const openPosition: SignalEvent | null = manual
     ? {
         dataEntrada: manual.data_entrada,
-        horaEntrada: null,
-        diaReferenciaEntrada: manual.data_entrada,
         zEntrada: manual.z_entrada,
         direcao: manual.direcao,
         dataSaida: null,
-        horaSaida: null,
-        diaReferenciaSaida: null,
         zSaida: null,
         pico: picoDesde(rows, manual.data_entrada, manual.z_entrada),
-        diasEmAberto: fractionalDaysBetween(
-          new Date(manual.data_entrada + "T00:00:00").getTime(),
-          Date.now()
-        ),
+        diasEmAberto: daysBetween(manual.data_entrada, hoje),
         estimada: false,
       }
     : null;

@@ -86,13 +86,9 @@ export function ZScoreChart({
   /** Oportunidades oficiais (63d) — marcam os pontos de entrada/saída no gráfico. */
   events?: SignalEvent[];
 }) {
-  // Usa o dia de referência real (não a data/hora interpolada) pra
-  // posicionar o marcador — sempre um dia com dado de fato plotado.
-  const entryDates = new Map(events.map((e) => [e.diaReferenciaEntrada, e.estimada]));
+  const entryDates = new Map(events.map((e) => [e.dataEntrada, e.estimada]));
   const exitDates = new Map(
-    events
-      .filter((e) => e.diaReferenciaSaida)
-      .map((e) => [e.diaReferenciaSaida as string, e.estimada])
+    events.filter((e) => e.dataSaida).map((e) => [e.dataSaida as string, e.estimada])
   );
 
   // A linha plotada é sempre o z-score expansivo (histórico) — cobre
