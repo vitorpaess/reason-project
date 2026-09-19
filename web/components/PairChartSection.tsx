@@ -6,7 +6,7 @@ import type { SignalEvent, ZScoreRow } from "@/lib/pairs-data";
 import { ZScoreChart } from "@/components/ZScoreChart";
 import { SignalHistoryTable } from "@/components/SignalHistoryTable";
 import { CorrelationChart } from "@/components/CorrelationChart";
-import { CorrelationTrendCard } from "@/components/CorrelationTrendCard";
+import { CorrelationTrendBadge } from "@/components/CorrelationTrendCard";
 
 export function PairChartSection({
   rows,
@@ -99,13 +99,9 @@ export function PairChartSection({
       </div>
 
       <div className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow-card)]">
-        <h2 className="mb-1 text-sm font-semibold text-ink-secondary">Correlação móvel ao longo do tempo</h2>
-        <p className="mb-4 text-xs text-ink-muted">
-          Mostra se a correlação entre os dois ativos vem se mantendo ou se enfraquecendo — quanto
-          mais estável e acima de {"0,50"}, mais confiável é o pressuposto por trás da estratégia.
-        </p>
-        <div className="mb-4">
-          <CorrelationTrendCard rows={filteredRows} />
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-ink-secondary">Correlação móvel</h2>
+          <CorrelationTrendBadge rows={filteredRows} />
         </div>
         <CorrelationChart rows={filteredRows} />
       </div>

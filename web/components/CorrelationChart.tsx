@@ -117,7 +117,7 @@ export function CorrelationChart({ rows }: { rows: ZScoreRow[] }) {
 
       <div className="mt-3 flex items-center gap-1.5 text-xs text-ink-muted">
         <span className="h-2 w-2 rounded-full" style={{ backgroundColor: colors.statusCritical }} />
-        <span>Zona de correlação baixa · abaixo de {LIMIAR_SAUDAVEL.toFixed(2)}</span>
+        <span>{"< " + LIMIAR_SAUDAVEL.toFixed(2)}</span>
       </div>
     </div>
   );
