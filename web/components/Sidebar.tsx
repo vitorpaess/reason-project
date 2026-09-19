@@ -20,10 +20,9 @@ export function Sidebar({ pairs }: { pairs: SidebarPair[] }) {
 
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col overflow-y-auto border-r border-border bg-page px-3 py-5">
-      <div className="mb-1 px-2.5 py-1.5">
+      <div className="mb-4 px-2.5 py-1.5">
         <Image src="/logo.png" alt="Paperplanes" width={135} height={24} priority />
       </div>
-      <p className="mb-4 px-2.5 text-xs text-ink-muted">Monitoramento diário</p>
 
       <nav className="flex flex-col gap-0.5">
         <Link

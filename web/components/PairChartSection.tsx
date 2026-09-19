@@ -6,6 +6,7 @@ import type { SignalEvent, ZScoreRow } from "@/lib/pairs-data";
 import { ZScoreChart } from "@/components/ZScoreChart";
 import { SignalHistoryTable } from "@/components/SignalHistoryTable";
 import { CorrelationChart } from "@/components/CorrelationChart";
+import { CorrelationTrendCard } from "@/components/CorrelationTrendCard";
 
 export function PairChartSection({
   rows,
@@ -103,6 +104,9 @@ export function PairChartSection({
           Mostra se a correlação entre os dois ativos vem se mantendo ou se enfraquecendo — quanto
           mais estável e acima de {"0,50"}, mais confiável é o pressuposto por trás da estratégia.
         </p>
+        <div className="mb-4">
+          <CorrelationTrendCard rows={filteredRows} />
+        </div>
         <CorrelationChart rows={filteredRows} />
       </div>
     </div>
