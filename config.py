@@ -16,7 +16,6 @@ PAIRS = [
     ("RKLB", "PL"),
     ("RPD", "TENB"),
     ("ALGT", "CPA"),
-    ("TRMB", "FICO"),
 ]
 
 TICKERS = sorted({t for pair in PAIRS for t in pair})

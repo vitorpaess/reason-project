@@ -96,30 +96,4 @@ export const COMPANIES: Record<string, CompanyInfo> = {
     descricao:
       "Fundada em 1947 e sediada na Cidade do Panamá, a Copa Holdings controla a Copa Airlines, companhia aérea que conecta América Central, América do Sul, América do Norte e o Caribe através do hub de conexões no Aeroporto Internacional de Tocumen, no Panamá.",
   },
-  TRMB: {
-    ticker: "TRMB",
-    nome: "Trimble",
-    bolsa: "NASDAQ",
-    setor: "Tecnologia · Hardware e software de posicionamento",
-    dominio: "trimble.com",
-    website: "https://www.trimble.com",
-    cik: "0000864749",
-    funcionarios: 11500,
-    receitaTtmUsd: 3782900000,
-    descricao:
-      "Fundada em 1978 e sediada em Westminster, Colorado (originalmente Trimble Navigation), a Trimble desenvolve tecnologia de posicionamento e software para os setores de construção, agricultura e transporte — incluindo ferramentas de projeto e gestão de obras (BIM/ERP), sistemas de agricultura de precisão e soluções de gestão de frotas para transporte rodoviário de carga.",
-  },
-  FICO: {
-    ticker: "FICO",
-    nome: "FICO",
-    bolsa: "NYSE",
-    setor: "Tecnologia · Análise de crédito e decisão",
-    dominio: "fico.com",
-    website: "https://www.fico.com",
-    cik: "0000814547",
-    funcionarios: 3876,
-    receitaTtmUsd: 2393575000,
-    descricao:
-      "Fundada em 1956 e sediada em Bozeman, Montana, a FICO (Fair Isaac Corporation) fornece software de análise e tomada de decisão para empresas, dividida em dois segmentos: Software, com a plataforma FICO Platform para gestão de risco, fraude e relacionamento com clientes; e Scores, incluindo o tradicional escore de crédito FICO usado por instituições financeiras e consumidores (via myFICO.com).",
-  },
 };

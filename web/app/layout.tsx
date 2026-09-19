@@ -10,8 +10,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "Paperplanes",
-  description:
-    "Monitoramento de z-score e correlação — RKLB/PL · RPD/TENB · ALGT/CPA · TRMB/FICO",
+  description: "Monitoramento de z-score e correlação — RKLB/PL · RPD/TENB · ALGT/CPA",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
