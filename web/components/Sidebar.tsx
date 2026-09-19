@@ -1,9 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutGrid, LineChart, LogOut } from "lucide-react";
-import { statusColor, statusLabel, colors } from "@/lib/theme";
+import { LayoutGrid, LogOut } from "lucide-react";
+import { statusColor, statusLabel } from "@/lib/theme";
 import { PairIcon } from "@/lib/pair-icons";
 import type { Estado } from "@/lib/pairs-data";
 
@@ -19,9 +20,8 @@ export function Sidebar({ pairs }: { pairs: SidebarPair[] }) {
 
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col overflow-y-auto border-r border-border bg-page px-3 py-5">
-      <div className="mb-1 flex items-center gap-2 px-2.5 py-1.5">
-        <LineChart size={16} strokeWidth={1.75} color={colors.seriesZScore} />
-        <span className="text-sm font-semibold text-ink-primary">Pairs Trading</span>
+      <div className="mb-1 px-2.5 py-1.5">
+        <Image src="/logo.png" alt="Paperplanes" width={135} height={24} priority />
       </div>
       <p className="mb-4 px-2.5 text-xs text-ink-muted">Monitoramento diário</p>
 

@@ -26,6 +26,10 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!login|api/login|_next/static|_next/image|favicon.ico).*)",
+    // Além das rotas já excluídas, deixa passar arquivos estáticos de
+    // public/ (ex: logo.png) sem exigir login — sem isso, a própria
+    // otimização de imagem do Next quebra (ela busca o arquivo original
+    // internamente, e essa busca também caía no proxy e virava redirect).
+    "/((?!login|api/login|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|avif)$).*)",
   ],
 };
