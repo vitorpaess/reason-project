@@ -6,6 +6,9 @@ export const PAIRS: PairDef[] = [
   { slug: "RKLB-PL", label: "RKLB/PL", a: "RKLB", b: "PL" },
   { slug: "RPD-TENB", label: "RPD/TENB", a: "RPD", b: "TENB" },
   { slug: "ALGT-CPA", label: "ALGT/CPA", a: "ALGT", b: "CPA" },
+  { slug: "AG-EXK", label: "AG/EXK", a: "AG", b: "EXK" },
+  { slug: "CDE-FSM", label: "CDE/FSM", a: "CDE", b: "FSM" },
+  { slug: "EXK-FSM", label: "EXK/FSM", a: "EXK", b: "FSM" },
 ];
 
 export const ENTRY_THRESHOLD = 1.2;
