@@ -10,13 +10,15 @@ import { PositionControl } from "@/components/PositionControl";
 import { ThresholdProgress } from "@/components/ThresholdProgress";
 import { PairChartSection } from "@/components/PairChartSection";
 import { CompanySidebar } from "@/components/CompanySidebar";
+import { CompanyPriceSection } from "@/components/CompanyPriceSection";
+import { fetchCompanyPriceSeries } from "@/lib/company-prices";
 
 function formatDate(iso: string): string {
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 }
 
-export function PairOverview({
+export async function PairOverview({
   pairDef,
   status,
   detailHref,
@@ -27,6 +29,10 @@ export function PairOverview({
   detailHref?: string;
 }) {
   const pronto = status.estado !== null && status.ultimo !== null;
+  const [precoA, precoB] = await Promise.all([
+    fetchCompanyPriceSeries(pairDef.a),
+    fetchCompanyPriceSeries(pairDef.b),
+  ]);
 
   return (
     <div>
@@ -100,6 +106,8 @@ export function PairOverview({
 
         <CompanySidebar tickers={[pairDef.a, pairDef.b]} />
       </div>
+
+      <CompanyPriceSection tickers={[pairDef.a, pairDef.b]} series={[precoA, precoB]} />
     </div>
   );
 }
