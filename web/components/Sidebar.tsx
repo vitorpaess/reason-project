@@ -5,12 +5,13 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LayoutGrid, LogOut } from "lucide-react";
 import { statusColor, statusLabel } from "@/lib/theme";
-import { PairIcon } from "@/lib/pair-icons";
+import { PairLogos } from "@/components/PairLogos";
 import type { Estado } from "@/lib/pairs-data";
 
 export type SidebarPair = {
   slug: string;
   label: string;
+  tickers: [string, string];
   zScore: number | null;
   estado: Estado | null;
 };
@@ -62,7 +63,7 @@ export function Sidebar({ pairs }: { pairs: SidebarPair[] }) {
               }`}
             >
               <div className="flex items-center gap-2">
-                <PairIcon slug={pair.slug} size={8} muted={!active} />
+                <PairLogos tickers={pair.tickers} muted={!active} />
                 <span
                   className={`text-sm font-medium ${
                     active ? "text-ink-primary" : "text-ink-secondary group-hover:text-ink-primary"

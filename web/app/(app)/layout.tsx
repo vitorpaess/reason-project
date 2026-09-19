@@ -15,6 +15,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       return {
         slug: pair.slug,
         label: pair.label,
+        tickers: [pair.a, pair.b] as [string, string],
         zScore: status.ultimo?.z_score_63d ?? null,
         estado: status.estado,
       };
