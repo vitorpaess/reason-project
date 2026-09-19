@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Pairs Trading Monitor",
+  title: "Paperplanes",
   description: "Monitoramento de z-score e correlação — RKLB/PL · RPD/TENB",
 };
 
