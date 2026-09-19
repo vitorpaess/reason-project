@@ -5,6 +5,7 @@ export type PairDef = { slug: string; label: string; a: string; b: string };
 export const PAIRS: PairDef[] = [
   { slug: "RKLB-PL", label: "RKLB/PL", a: "RKLB", b: "PL" },
   { slug: "RPD-TENB", label: "RPD/TENB", a: "RPD", b: "TENB" },
+  { slug: "ALGT-CPA", label: "ALGT/CPA", a: "ALGT", b: "CPA" },
 ];
 
 export const ENTRY_THRESHOLD = 1.2;

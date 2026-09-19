@@ -15,6 +15,7 @@ SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 PAIRS = [
     ("RKLB", "PL"),
     ("RPD", "TENB"),
+    ("ALGT", "CPA"),
 ]
 
 TICKERS = sorted({t for pair in PAIRS for t in pair})

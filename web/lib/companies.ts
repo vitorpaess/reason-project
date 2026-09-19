@@ -70,4 +70,30 @@ export const COMPANIES: Record<string, CompanyInfo> = {
     descricao:
       "Fundada em 2002 e sediada em Columbia, Maryland, a Tenable é especializada em identificar e gerenciar a exposição a riscos cibernéticos. Sua plataforma Tenable One centraliza a descoberta e priorização de vulnerabilidades em nuvem, redes, Active Directory e ambientes de tecnologia operacional (OT), incluindo as ferramentas Nessus, referência no mercado de avaliação de vulnerabilidades.",
   },
+  ALGT: {
+    ticker: "ALGT",
+    nome: "Allegiant Travel Company",
+    bolsa: "NASDAQ",
+    setor: "Industrials · Companhias aéreas",
+    dominio: "allegiantair.com",
+    website: "https://www.allegiantair.com",
+    cik: "0001362468",
+    funcionarios: 8484,
+    receitaTtmUsd: 2894042000,
+    descricao:
+      "Fundada em 1997 e sediada em Las Vegas, Nevada, a Allegiant é uma companhia aérea de lazer voltada a moradores de cidades menores e pouco atendidas nos Estados Unidos, oferecendo voos diretos e pouco frequentes até destinos turísticos populares. Além das passagens, gera receita com bagagem despachada, assentos preferenciais, seguro-viagem e fretamentos sob contrato.",
+  },
+  CPA: {
+    ticker: "CPA",
+    nome: "Copa Holdings",
+    bolsa: "NYSE",
+    setor: "Industrials · Companhias aéreas",
+    dominio: "copaair.com",
+    website: "https://www.copaair.com",
+    cik: "0001345105",
+    funcionarios: 8565,
+    receitaTtmUsd: 3987794000,
+    descricao:
+      "Fundada em 1947 e sediada na Cidade do Panamá, a Copa Holdings controla a Copa Airlines, companhia aérea que conecta América Central, América do Sul, América do Norte e o Caribe através do hub de conexões no Aeroporto Internacional de Tocumen, no Panamá.",
+  },
 };
