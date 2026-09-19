@@ -6,6 +6,10 @@ function formatMoment(iso: string, hora: number | null): string {
   return hora !== null ? `${data}, ~${hora}h` : data;
 }
 
+function formatSigned(n: number): string {
+  return (n >= 0 ? "+" : "") + n.toFixed(2);
+}
+
 export function SignalHistoryTable({ oportunidades }: { oportunidades: SignalEvent[] }) {
   if (oportunidades.length === 0) {
     return <p className="text-sm text-ink-muted">Nenhuma oportunidade ainda.</p>;
@@ -25,6 +29,7 @@ export function SignalHistoryTable({ oportunidades }: { oportunidades: SignalEve
               <th className="px-4 py-2.5 font-medium">Direção</th>
               <th className="px-4 py-2.5 font-medium">Saída (estimada)</th>
               <th className="px-4 py-2.5 font-medium">z saída</th>
+              <th className="px-4 py-2.5 font-medium">Pico do z-score</th>
               <th className="px-4 py-2.5 text-right font-medium">Duração</th>
             </tr>
           </thead>
@@ -58,6 +63,9 @@ export function SignalHistoryTable({ oportunidades }: { oportunidades: SignalEve
                 </td>
                 <td className="px-4 py-2.5 tabular-nums text-ink-primary">
                   {evento.zSaida !== null ? evento.zSaida.toFixed(2) : "—"}
+                </td>
+                <td className="px-4 py-2.5 tabular-nums font-medium text-ink-primary">
+                  {formatSigned(evento.pico)}
                 </td>
                 <td className="px-4 py-2.5 text-right tabular-nums text-ink-primary">
                   {evento.diasEmAberto.toFixed(1)}d
