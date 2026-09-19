@@ -18,7 +18,7 @@ export function Sidebar({ pairs }: { pairs: SidebarPair[] }) {
   const pathname = usePathname();
 
   return (
-    <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-border bg-page px-3 py-5">
+    <aside className="flex h-screen w-64 shrink-0 flex-col overflow-y-auto border-r border-border bg-page px-3 py-5">
       <div className="mb-1 flex items-center gap-2 px-2.5 py-1.5">
         <LineChart size={16} strokeWidth={1.75} color={colors.seriesZScore} />
         <span className="text-sm font-semibold text-ink-primary">Pairs Trading</span>
