@@ -25,7 +25,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     <div className="flex h-screen overflow-hidden">
       <Sidebar pairs={sidebarPairs} />
       <main className="flex-1 overflow-y-auto px-10 py-8">
-        <div className="mx-auto max-w-4xl">{children}</div>
+        <div className="mx-auto max-w-5xl">{children}</div>
       </main>
     </div>
   );

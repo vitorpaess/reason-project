@@ -12,7 +12,7 @@ Components / Route Handlers) — nunca chega ao navegador.
 ```bash
 cd web
 npm install
-cp .env.example .env.local   # preencha SUPABASE_URL, SUPABASE_KEY, DASHBOARD_PASSWORD
+cp .env.example .env.local   # preencha SUPABASE_URL, SUPABASE_KEY, DASHBOARD_PASSWORD, LOGO_DEV_PUBLISHABLE_KEY
 npm run dev
 ```
 
@@ -26,6 +26,7 @@ Abra http://localhost:3000 — vai pedir a senha definida em `DASHBOARD_PASSWORD
    - `SUPABASE_URL`
    - `SUPABASE_KEY`
    - `DASHBOARD_PASSWORD`
+   - `LOGO_DEV_PUBLISHABLE_KEY`
 4. Deploy. Todo push em `main` gera um novo deploy automaticamente.
 
 As páginas de par (`/pair/[pair]`) são renderizadas por requisição
@@ -40,3 +41,4 @@ congeladas num build antigo.
 - `app/pair/[pair]/page.tsx` — status, gráfico e histórico do par selecionado.
 - `lib/pairs-data.ts` — porta em TypeScript da lógica de estado (aberta/saída/espera) do `compute_zscore.py`, aplicada sobre os dados já calculados no Supabase (não recalcula z-score, só interpreta o que já está salvo).
 - `lib/theme.ts` — mesma paleta validada (contraste/CVD) do dashboard Python.
+- `lib/companies.ts` / `lib/logo.ts` — dados básicos e logo (via [logo.dev](https://logo.dev)) das empresas de cada par, mostrados no painel à direita (`CompanySidebar`).
