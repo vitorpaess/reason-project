@@ -5,17 +5,10 @@ import { getOpenPosition } from "./positions";
 
 export type ZScoreRow = {
   data: string; // ISO date
-  // Cálculo 1 (oficial): janela móvel de 63 dias — decide status atual e
-  // cards do topo. buildOpportunityHistory recalcula sinal/direção a
-  // partir daqui (e do expansivo, como fallback), em vez de ler colunas
-  // sinal/direcao já computadas pelo Python — assim o histórico cobre o
-  // período anterior aos 63 dias também (ver buildOpportunityHistory).
+  // Janela móvel de 63 dias — única série do sistema. Decide status
+  // atual, cards do topo, gráfico e histórico de oportunidades.
   z_score_63d: number | null;
   correlacao_movel_63d: number | null;
-  // Cálculo 2 (histórico): janela expansiva, todos os dias desde o
-  // início — só para o gráfico principal e a tabela de oportunidades.
-  z_score_expansivo: number | null;
-  correlacao_expansiva: number | null;
   spread: number | null;
 };
 
@@ -33,15 +26,11 @@ export type SignalEvent = {
   /** Valor de z mais extremo (com sinal) observado durante a oportunidade. */
   pico: number;
   diasEmAberto: number;
-  /** true se entrada ou saída caem no período anterior aos 63 dias
-   * oficiais, onde só existe o z-score expansivo (estimativa, não o
-   * cálculo que de fato dispararia um sinal oficial). */
-  estimada: boolean;
 };
 
-// oportunidade_entrada: |z_63d| > limiar de entrada, sem posição aberta.
-// em_operacao: posição aberta, mas |z_63d| ainda não voltou pra zona de saída.
-// oportunidade_saida: posição aberta E |z_63d| já voltou pra zona de saída —
+// oportunidade_entrada: |z| > limiar de entrada, sem posição aberta.
+// em_operacao: posição aberta, mas |z| ainda não voltou pra zona de saída.
+// oportunidade_saida: posição aberta E |z| já voltou pra zona de saída —
 //   é diferente de "em_operacao" porque agora é a hora de considerar sair.
 // espera: nada disso — sem sinal e sem posição aberta.
 export type Estado =
@@ -52,17 +41,16 @@ export type Estado =
 
 export type PairStatus = {
   rows: ZScoreRow[];
-  ultimo: ZScoreRow | null; // última linha com z_score_63d válido (cálculo oficial)
-  estado: Estado | null; // null = histórico insuficiente pro cálculo oficial (< 63 dias)
+  ultimo: ZScoreRow | null; // última linha com z_score_63d válido
+  estado: Estado | null; // null = histórico insuficiente (< 63 dias)
   openPosition: SignalEvent | null; // posição confirmada em aberto (define o status atual)
-  oportunidades: SignalEvent[]; // TODO cruzamento de limiar já ocorrido (cálculo oficial), mais recente primeiro
-  temSerieExpansiva: boolean; // true assim que houver pelo menos 1 z_score_expansivo válido
+  oportunidades: SignalEvent[]; // todo cruzamento de limiar já ocorrido, mais recente primeiro
 };
 
 export async function fetchZScoreRows(par: string): Promise<ZScoreRow[]> {
   const { data, error } = await supabase()
     .from("pares_zscore")
-    .select("data,z_score_63d,z_score_expansivo,correlacao_movel_63d,correlacao_expansiva,spread")
+    .select("data,z_score_63d,correlacao_movel_63d,spread")
     .eq("par", par)
     .order("data", { ascending: true });
 
@@ -72,7 +60,7 @@ export async function fetchZScoreRows(par: string): Promise<ZScoreRow[]> {
   return (data ?? []) as ZScoreRow[];
 }
 
-/** z-score oficial (63d) mais recente — usado pra validar entrada/saída no servidor. */
+/** z-score mais recente — usado pra validar entrada/saída no servidor. */
 export async function getLatestZScore(par: string): Promise<number | null> {
   const rows = await fetchZScoreRows(par);
   const validas = rows.filter((r) => r.z_score_63d !== null);
@@ -92,8 +80,9 @@ function picoDesde(rows: ZScoreRow[], desde: string, valorInicial: number): numb
   let pico = valorInicial;
   for (const row of rows) {
     if (row.data < desde) continue;
-    const z = row.z_score_63d ?? row.z_score_expansivo;
-    if (z !== null && Math.abs(z) > Math.abs(pico)) pico = z;
+    if (row.z_score_63d !== null && Math.abs(row.z_score_63d) > Math.abs(pico)) {
+      pico = row.z_score_63d;
+    }
   }
   return pico;
 }
@@ -104,32 +93,25 @@ function direcaoParaZ(par: string, z: number): string {
 }
 
 /**
- * Todas as oportunidades já ocorridas, cobrindo o histórico inteiro — não
- * só o período com os 63 dias oficiais completos. Pra cada dia, usa o
- * z-score 63d quando existe (cálculo oficial, o mesmo que decide sinal
- * real); nos dias anteriores a isso (primeiros ~62 dias de dado), cai
- * pro z-score expansivo, já que é a única série disponível ali — sem
- * esse fallback, qualquer oportunidade que só apareceu antes dos 63 dias
- * ficaria invisível no histórico mesmo estando visível no gráfico.
- * Marca essas como "estimada" pra não parecerem sinais oficiais.
- *
- * Entrada/saída usam o dia real de fechamento e o z realmente observado
- * naquele dia (pode passar um pouco do limiar — só temos 1 preço por dia).
+ * Todo cruzamento de limiar já ocorrido, usando exclusivamente o z-score
+ * de 63 dias — mesma série que decide o status atual e é plotada no
+ * gráfico. Entrada/saída usam o dia real de fechamento e o z realmente
+ * observado naquele dia (pode passar um pouco do limiar — só temos 1
+ * preço por dia).
  */
 export function buildOpportunityHistory(par: string, rows: ZScoreRow[]): SignalEvent[] {
   const oportunidades: SignalEvent[] = [];
   let state: "flat" | "aberta" = "flat";
-  let entradaAtual: { data: string; z: number; estimada: boolean; pico: number } | null = null;
+  let entradaAtual: { data: string; z: number; pico: number } | null = null;
 
   for (const row of rows) {
-    const oficial = row.z_score_63d !== null;
-    const z = row.z_score_63d ?? row.z_score_expansivo;
+    const z = row.z_score_63d;
     if (z === null) continue;
     const az = Math.abs(z);
 
     if (state === "flat" && az > ENTRY_THRESHOLD) {
       state = "aberta";
-      entradaAtual = { data: row.data, z, estimada: !oficial, pico: z };
+      entradaAtual = { data: row.data, z, pico: z };
     } else if (state === "aberta" && entradaAtual) {
       if (Math.abs(z) > Math.abs(entradaAtual.pico)) entradaAtual.pico = z;
 
@@ -142,7 +124,6 @@ export function buildOpportunityHistory(par: string, rows: ZScoreRow[]): SignalE
           zSaida: z,
           pico: entradaAtual.pico,
           diasEmAberto: daysBetween(entradaAtual.data, row.data),
-          estimada: entradaAtual.estimada || !oficial,
         });
         state = "flat";
         entradaAtual = null;
@@ -160,7 +141,6 @@ export function buildOpportunityHistory(par: string, rows: ZScoreRow[]): SignalE
       zSaida: null,
       pico: entradaAtual.pico,
       diasEmAberto: daysBetween(entradaAtual.data, hoje),
-      estimada: entradaAtual.estimada,
     });
   }
 
@@ -171,7 +151,6 @@ export async function getPairStatus(par: string): Promise<PairStatus> {
   const rows = await fetchZScoreRows(par);
   const validas = rows.filter((r) => r.z_score_63d !== null);
   const ultimo = validas.length > 0 ? validas[validas.length - 1] : null;
-  const temSerieExpansiva = rows.some((r) => r.z_score_expansivo !== null);
 
   const manual = await getOpenPosition(par);
   const hoje = new Date().toISOString().slice(0, 10);
@@ -184,7 +163,6 @@ export async function getPairStatus(par: string): Promise<PairStatus> {
         zSaida: null,
         pico: picoDesde(rows, manual.data_entrada, manual.z_entrada),
         diasEmAberto: daysBetween(manual.data_entrada, hoje),
-        estimada: false,
       }
     : null;
 
@@ -200,5 +178,5 @@ export async function getPairStatus(par: string): Promise<PairStatus> {
     }
   }
 
-  return { rows, ultimo, estado, openPosition, oportunidades, temSerieExpansiva };
+  return { rows, ultimo, estado, openPosition, oportunidades };
 }

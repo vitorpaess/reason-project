@@ -1,13 +1,15 @@
-"""Calcula duas séries de z-score/correlação em paralelo para cada par.
+"""Calcula z-score, correlação móvel e sinais de entrada/saída para cada par.
 
-Cálculo 1 (63d, oficial): janela móvel de ROLLING_WINDOW_DAYS dias — é o
-único que decide sinais de entrada/saída e alimenta os cards de status do
-dashboard. Comportamento idêntico ao que já existia.
+Um único cálculo: janela móvel de ROLLING_WINDOW_DAYS dias com aquecimento
+adaptativo (min_periods baixo). Do 2º dia até o dia ROLLING_WINDOW_DAYS-1,
+usa todos os dados disponíveis até aquele ponto (a janela do pandas cresce
+sozinha); a partir do dia ROLLING_WINDOW_DAYS, vira uma janela móvel real
+dos últimos N dias, esquecendo dados mais antigos normalmente. Não existe
+mais uma série "expansiva" separada — é a mesma coluna o tempo todo, só
+com amostra menor (e por isso mais ruidosa) nos primeiros dias.
 
-Cálculo 2 (expansivo, histórico): usa todos os dias disponíveis desde o
-início, sem mínimo de 63 dias — só para o gráfico principal e a tabela de
-histórico de oportunidades poderem mostrar dado desde o primeiro dia
-coletado. Nunca decide sinal nenhum.
+Essa única série decide sinais de entrada/saída e alimenta tanto os cards
+de status quanto o gráfico e a tabela de histórico de oportunidades.
 
 Lê os preços brutos já salvos no Supabase (nunca recalcula os preços), e
 recalcula a tabela derivada pares_zscore inteira a cada execução — isso é
@@ -43,34 +45,26 @@ def _load_pair_frame(ticker_a: str, ticker_b: str) -> pd.DataFrame:
 def _compute_signals(df: pd.DataFrame, ticker_a: str, ticker_b: str) -> pd.DataFrame:
     window = config.ROLLING_WINDOW_DAYS
 
+    # min_periods=2 é o mínimo matemático (desvio-padrão/correlação exigem
+    # pelo menos 2 pontos) — com isso, rolling(window=63) já faz o
+    # aquecimento adaptativo sozinho: usa 2, 3, 4... observações nos
+    # primeiros dias e trava em exatamente 63 a partir do dia 63.
+    MIN_PERIODS = 2
+
     df["retorno_a"] = df["preco_a"].pct_change()
     df["retorno_b"] = df["preco_b"].pct_change()
-
-    # Correlação: móvel de 63d (oficial) e expansiva (histórico, desde o
-    # 2º dia — precisa de pelo menos 2 pontos pra existir correlação).
     df["correlacao_movel_63d"] = (
-        df["retorno_a"].rolling(window=window, min_periods=window).corr(df["retorno_b"])
-    )
-    df["correlacao_expansiva"] = (
-        df["retorno_a"].expanding(min_periods=2).corr(df["retorno_b"])
+        df["retorno_a"].rolling(window=window, min_periods=MIN_PERIODS).corr(df["retorno_b"])
     )
 
     preco_a_inicial = df["preco_a"].iloc[0]
     preco_b_inicial = df["preco_b"].iloc[0]
     df["spread"] = (df["preco_a"] / preco_a_inicial) - (df["preco_b"] / preco_b_inicial)
 
-    # z-score 63d (oficial): média/desvio do spread na janela móvel.
-    media_63d = df["spread"].rolling(window=window, min_periods=window).mean()
-    desvio_63d = df["spread"].rolling(window=window, min_periods=window).std()
+    media_63d = df["spread"].rolling(window=window, min_periods=MIN_PERIODS).mean()
+    desvio_63d = df["spread"].rolling(window=window, min_periods=MIN_PERIODS).std()
     df["z_score_63d"] = (df["spread"] - media_63d) / desvio_63d
 
-    # z-score expansivo (histórico): média/desvio usando todos os dias
-    # já vistos até aquele ponto, sem "esquecer" dados antigos.
-    media_exp = df["spread"].expanding(min_periods=2).mean()
-    desvio_exp = df["spread"].expanding(min_periods=2).std()
-    df["z_score_expansivo"] = (df["spread"] - media_exp) / desvio_exp
-
-    # Sinais de entrada/saída: SEMPRE a partir do z-score 63d oficial.
     sinais = []
     direcoes = []
     state = "flat"
@@ -112,9 +106,7 @@ def _to_rows(df: pd.DataFrame, par: str) -> list[dict]:
                 "par": par,
                 "data": row["data"].date().isoformat(),
                 "z_score_63d": _num_or_none(row["z_score_63d"]),
-                "z_score_expansivo": _num_or_none(row["z_score_expansivo"]),
                 "correlacao_movel_63d": _num_or_none(row["correlacao_movel_63d"]),
-                "correlacao_expansiva": _num_or_none(row["correlacao_expansiva"]),
                 "spread": _num_or_none(row["spread"]),
                 "sinal": row["sinal"],
                 "direcao": row["direcao"],
@@ -136,9 +128,8 @@ def run() -> None:
             print(
                 f"[compute_zscore] AVISO: {par} tem apenas {len(df)} dias de histórico "
                 f"comum entre as duas ações (mínimo recomendado: {config.MIN_HISTORY_DAYS}). "
-                f"z-score/correlação de {config.ROLLING_WINDOW_DAYS}d (oficiais) ficarão "
-                f"com NaN até acumular dias suficientes — a série expansiva já fica "
-                f"disponível desde o 2º dia, só pro gráfico/histórico."
+                f"Até completar {config.ROLLING_WINDOW_DAYS} dias, o z-score/correlação usam "
+                f"uma amostra menor que a janela cheia — ficam mais ruidosos, não NaN."
             )
 
         df = _compute_signals(df, ticker_a, ticker_b)
@@ -151,14 +142,12 @@ def run() -> None:
                 f"[compute_zscore] {par}: {len(rows)} linhas atualizadas. "
                 f"z_score_63d mais recente = {ultimo['z_score_63d']:.3f} "
                 f"| correlação 63d = {ultimo['correlacao_movel_63d']:.3f} "
-                f"| z_score_expansivo = {ultimo['z_score_expansivo']:.3f} "
-                f"| correlação expansiva = {ultimo['correlacao_expansiva']:.3f} "
                 f"| sinal = {ultimo['sinal']}"
             )
         else:
             print(
                 f"[compute_zscore] {par}: {len(rows)} linhas atualizadas "
-                f"(ainda sem z-score/correlação 63d oficiais válidos)."
+                f"(ainda sem z-score/correlação 63d válidos)."
             )
 
 
