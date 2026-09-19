@@ -5,6 +5,7 @@ import { RANGE_OPTIONS, rangeStartDate, type RangeKey } from "@/lib/date-ranges"
 import type { SignalEvent, ZScoreRow } from "@/lib/pairs-data";
 import { ZScoreChart } from "@/components/ZScoreChart";
 import { SignalHistoryTable } from "@/components/SignalHistoryTable";
+import { CorrelationChart } from "@/components/CorrelationChart";
 
 export function PairChartSection({
   rows,
@@ -91,9 +92,18 @@ export function PairChartSection({
         )}
       </div>
 
-      <div>
+      <div className="mb-6">
         <h2 className="mb-3 text-sm font-semibold text-ink-secondary">Histórico de oportunidades</h2>
         <SignalHistoryTable oportunidades={filteredOportunidades} />
+      </div>
+
+      <div className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow-card)]">
+        <h2 className="mb-1 text-sm font-semibold text-ink-secondary">Correlação móvel ao longo do tempo</h2>
+        <p className="mb-4 text-xs text-ink-muted">
+          Mostra se a correlação entre os dois ativos vem se mantendo ou se enfraquecendo — quanto
+          mais estável e acima de {"0,50"}, mais confiável é o pressuposto por trás da estratégia.
+        </p>
+        <CorrelationChart rows={filteredRows} />
       </div>
     </div>
   );
