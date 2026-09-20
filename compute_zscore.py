@@ -163,6 +163,9 @@ def run() -> None:
     print(f"[compute_zscore] Fazendo upsert de {len(status_rows)} linhas em pares_status...")
     db.upsert_pares_status(status_rows)
 
+    pares_validos = [f"{p['ticker_a']}/{p['ticker_b']}" for p in pares]
+    db.prune_pares_status_orfaos(pares_validos)
+
     print(
         f"[compute_zscore] Concluído: {len(pares)} pares processados "
         f"({sem_dados} sem dado de preço comum, {historico_curto} com histórico < "

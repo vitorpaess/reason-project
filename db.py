@@ -64,9 +64,31 @@ def upsert_precos(rows: list[dict]) -> None:
     _upsert_paralelo(config.TABLE_PRECOS, rows, "ticker,data")
 
 
-def upsert_pares_config(rows: list[dict]) -> None:
-    """rows: [{ticker_a, ticker_b, setor}, ...]"""
+def sync_pares_config(rows: list[dict]) -> None:
+    """rows: [{ticker_a, ticker_b, setor}, ...] — substitui pares_config
+    inteira pelo conteúdo atual da planilha (apaga tudo, reinsere na
+    sequência). Um upsert simples nunca removeria pares que saíram da
+    planilha; como pares_config é pequena (a lista curada de pares, não o
+    preço bruto), apagar e reinserir é mais simples e confiável do que
+    calcular um diff."""
+    get_client().table(config.TABLE_PARES_CONFIG).delete().gt("id", 0).execute()
     _upsert_paralelo(config.TABLE_PARES_CONFIG, rows, "ticker_a,ticker_b")
+
+
+def prune_pares_status_orfaos(pares_validos: list[str]) -> None:
+    """Remove de pares_status qualquer par que não esteja mais em
+    pares_config (ex: removido da planilha) — sem isso, ficaria um status
+    calculado pra um par que não existe mais (inofensivo pra view, já que
+    ela parte de pares_config, mas é lixo acumulando à toa)."""
+    if not pares_validos:
+        get_client().table(config.TABLE_PARES_STATUS).delete().neq("par", "").execute()
+        return
+    todos = _fetch_paginado_paralelo(config.TABLE_PARES_STATUS, "par")
+    validos = set(pares_validos)
+    orfaos = [r["par"] for r in todos if r["par"] not in validos]
+    if orfaos:
+        for lote in _chunked(orfaos):
+            get_client().table(config.TABLE_PARES_STATUS).delete().in_("par", lote).execute()
 
 
 def upsert_pares_status(rows: list[dict]) -> None:
