@@ -1,7 +1,8 @@
 import "server-only";
-import { supabase } from "./supabase";
 import { ENTRY_THRESHOLD, EXIT_THRESHOLD } from "./config";
 import { getOpenPosition } from "./positions";
+import { fetchCompanyPriceSeries } from "./company-prices";
+import { computeZScoreSeries } from "./zscore-calc";
 
 export type ZScoreRow = {
   data: string; // ISO date
@@ -47,17 +48,18 @@ export type PairStatus = {
   oportunidades: SignalEvent[]; // todo cruzamento de limiar já ocorrido, mais recente primeiro
 };
 
+/** Calcula a série de z-score/correlação sob demanda, a partir do preço
+ * bruto dos dois tickers — não lê mais de uma tabela pré-calculada (ver
+ * lib/zscore-calc.ts pro porquê). */
 export async function fetchZScoreRows(par: string): Promise<ZScoreRow[]> {
-  const { data, error } = await supabase()
-    .from("pares_zscore")
-    .select("data,z_score_63d,correlacao_movel_63d,spread")
-    .eq("par", par)
-    .order("data", { ascending: true });
+  const [tickerA, tickerB] = par.split("/");
+  if (!tickerA || !tickerB) return [];
 
-  if (error) {
-    throw new Error(`Falha ao ler pares_zscore para ${par}: ${error.message}`);
-  }
-  return (data ?? []) as ZScoreRow[];
+  const [precosA, precosB] = await Promise.all([
+    fetchCompanyPriceSeries(tickerA),
+    fetchCompanyPriceSeries(tickerB),
+  ]);
+  return computeZScoreSeries(precosA, precosB);
 }
 
 /** z-score mais recente — usado pra validar entrada/saída no servidor. */

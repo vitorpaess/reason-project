@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { pairBySlug } from "@/lib/config";
+import { fetchPairBySlug } from "@/lib/pares-repo";
 import { getPairStatus } from "@/lib/pairs-data";
 import { PairOverview } from "@/components/PairOverview";
 
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function PairPage({ params }: PageProps<"/pair/[pair]">) {
   const { pair: slug } = await params;
-  const pairDef = pairBySlug(slug);
+  const pairDef = await fetchPairBySlug(slug);
   if (!pairDef) notFound();
 
   const status = await getPairStatus(pairDef.label);

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { PAIRS } from "@/lib/config";
+import { pairExists } from "@/lib/pares-repo";
 import { getLatestZScore } from "@/lib/pairs-data";
 import { exitPosition } from "@/lib/positions";
 
@@ -7,7 +7,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const par = typeof body?.par === "string" ? body.par : "";
 
-  if (!PAIRS.some((p) => p.label === par)) {
+  if (!(await pairExists(par))) {
     return NextResponse.json({ error: "Par inválido." }, { status: 400 });
   }
 

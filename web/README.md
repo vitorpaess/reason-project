@@ -1,8 +1,12 @@
 # Pairs Trading Monitor — Dashboard
 
-Next.js (App Router) + Tailwind + Recharts. Lê as tabelas `precos_diarios` e
-`pares_zscore` do Supabase (populadas pelos scripts Python na raiz do repo)
-e renderiza status, gráfico de z-score e histórico de sinais por par.
+Next.js (App Router) + Tailwind + Recharts. Lê as tabelas `precos_diarios`,
+`pares_status` e `pares_config` do Supabase (populadas pelos scripts Python
+na raiz do repo, a partir de duas planilhas do Google Sheets) e renderiza
+uma tabela pesquisável/filtrável de todos os pares, além de status, gráfico
+de z-score e histórico de sinais por par individual — o histórico completo
+de cada par é recalculado sob demanda (`lib/zscore-calc.ts`), não vem
+pré-computado do Supabase (ver "Escala" no README da raiz do repo).
 
 A secret key do Supabase só é usada em código server-side (Server
 Components / Route Handlers) — nunca chega ao navegador.
@@ -12,7 +16,7 @@ Components / Route Handlers) — nunca chega ao navegador.
 ```bash
 cd web
 npm install
-cp .env.example .env.local   # preencha SUPABASE_URL, SUPABASE_KEY, DASHBOARD_PASSWORD, LOGO_DEV_PUBLISHABLE_KEY
+cp .env.example .env.local   # preencha SUPABASE_URL, SUPABASE_KEY, DASHBOARD_PASSWORD
 npm run dev
 ```
 
@@ -26,10 +30,9 @@ Abra http://localhost:3000 — vai pedir a senha definida em `DASHBOARD_PASSWORD
    - `SUPABASE_URL`
    - `SUPABASE_KEY`
    - `DASHBOARD_PASSWORD`
-   - `LOGO_DEV_PUBLISHABLE_KEY`
 4. Deploy. Todo push em `main` gera um novo deploy automaticamente.
 
-As páginas de par (`/pair/[pair]`) são renderizadas por requisição
+As páginas (`/dashboard`, `/pair/[pair]`) são renderizadas por requisição
 (`export const dynamic = "force-dynamic"`), então sempre refletem o que a
 rotina agendada gravou no Supabase no último dia útil — nunca ficam
 congeladas num build antigo.
@@ -37,8 +40,10 @@ congeladas num build antigo.
 ## Estrutura
 
 - `proxy.ts` — protege todas as rotas com senha (cookie httpOnly), exceto `/login`.
-- `app/pair/layout.tsx` — busca o status dos dois pares e renderiza a sidebar.
-- `app/pair/[pair]/page.tsx` — status, gráfico e histórico do par selecionado.
-- `lib/pairs-data.ts` — porta em TypeScript da lógica de estado (aberta/saída/espera) do `compute_zscore.py`, aplicada sobre os dados já calculados no Supabase (não recalcula z-score, só interpreta o que já está salvo).
+- `app/(app)/dashboard/page.tsx` — tabela de todos os pares (busca, filtro por setor/status, ordenação, paginação — server-side, via `lib/pares-repo.ts`). É a tela inicial pra navegar entre os ~7,9 mil pares.
+- `app/(app)/pair/[pair]/page.tsx` — status, gráfico e histórico do par selecionado.
+- `lib/pares-repo.ts` — lê `pares_config`/a view `pares_status_atual` no Supabase (status mais recente de cada par); substitui o antigo array estático de pares (inviável na escala atual).
+- `lib/zscore-calc.ts` — porta em TypeScript do cálculo de z-score/correlação de `compute_zscore.py`, computado sob demanda a partir do preço bruto (não lido de uma tabela pré-calculada).
+- `lib/pairs-data.ts` — lógica de estado (aberta/saída/espera) e histórico de oportunidades, aplicada sobre a série calculada por `zscore-calc.ts`.
 - `lib/theme.ts` — mesma paleta validada (contraste/CVD) do dashboard Python.
-- `lib/companies.ts` / `lib/logo.ts` — dados básicos e logo (via [logo.dev](https://logo.dev)) das empresas de cada par, mostrados no painel à direita (`CompanySidebar`).
+- `lib/company-prices.ts` / `components/CompanyPriceChart.tsx` — gráfico de preço bruto de cada ticker de um par (sem dado de empresa curado — só o preço que já vem da planilha).

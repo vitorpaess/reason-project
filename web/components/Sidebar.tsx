@@ -4,19 +4,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LayoutGrid, LogOut } from "lucide-react";
-import { statusColor, statusLabel } from "@/lib/theme";
-import { PairLogos } from "@/components/PairLogos";
-import type { Estado } from "@/lib/pairs-data";
 
-export type SidebarPair = {
-  slug: string;
-  label: string;
-  tickers: [string, string];
-  zScore: number | null;
-  estado: Estado | null;
-};
-
-export function Sidebar({ pairs }: { pairs: SidebarPair[] }) {
+// Com ~7.9k pares, uma lista completa na sidebar não escala (nem em UX, nem
+// no custo de buscar status de cada par a cada carregamento de página) —
+// a navegação/busca por par vive na tabela do dashboard agora.
+export function Sidebar() {
   const pathname = usePathname();
 
   return (
@@ -28,7 +20,7 @@ export function Sidebar({ pairs }: { pairs: SidebarPair[] }) {
       <nav className="flex flex-col gap-0.5">
         <Link
           href="/dashboard"
-          className={`mb-3 flex items-center gap-2 rounded-lg px-2.5 py-2 transition-colors ${
+          className={`flex items-center gap-2 rounded-lg px-2.5 py-2 transition-colors ${
             pathname === "/dashboard" ? "bg-surface-raised" : "hover:bg-surface"
           }`}
         >
@@ -45,49 +37,6 @@ export function Sidebar({ pairs }: { pairs: SidebarPair[] }) {
             Dashboard
           </span>
         </Link>
-
-        <p className="mb-1 px-2.5 text-xs font-medium uppercase tracking-wide text-ink-muted">
-          Pares
-        </p>
-
-        {pairs.map((pair) => {
-          const active = pathname === `/pair/${pair.slug}`;
-          return (
-            <Link
-              key={pair.slug}
-              href={`/pair/${pair.slug}`}
-              className={`group rounded-lg px-2.5 py-2 transition-colors ${
-                active
-                  ? "bg-surface-raised"
-                  : "hover:bg-surface"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <PairLogos tickers={pair.tickers} muted={!active} />
-                <span
-                  className={`text-sm font-medium ${
-                    active ? "text-ink-primary" : "text-ink-secondary group-hover:text-ink-primary"
-                  }`}
-                >
-                  {pair.label}
-                </span>
-              </div>
-              <div className="mt-0.5 flex items-center gap-1.5 pl-6 text-xs">
-                <span className="tabular-nums text-ink-muted">
-                  z {pair.zScore !== null ? pair.zScore.toFixed(2) : "—"}
-                </span>
-                {pair.estado && (
-                  <>
-                    <span className="text-ink-muted">·</span>
-                    <span style={{ color: statusColor(pair.estado) }} className="font-medium">
-                      {statusLabel[pair.estado]}
-                    </span>
-                  </>
-                )}
-              </div>
-            </Link>
-          );
-        })}
       </nav>
 
       <div className="mt-auto px-2.5">
