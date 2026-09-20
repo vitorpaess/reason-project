@@ -3,12 +3,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutGrid, LogOut } from "lucide-react";
+import { LayoutGrid, LogOut, Heart } from "lucide-react";
+import { statusColor, statusLabel } from "@/lib/theme";
+import { PairIcon } from "@/lib/pair-icons";
+import type { FavoritePair } from "@/lib/favorites-repo";
 
-// Com ~7.9k pares, uma lista completa na sidebar não escala (nem em UX, nem
-// no custo de buscar status de cada par a cada carregamento de página) —
-// a navegação/busca por par vive na tabela do dashboard agora.
-export function Sidebar() {
+// Com ~7.9k pares, uma lista completa na sidebar não escala — só os
+// favoritos (marcados com o coração na página do par) aparecem aqui.
+export function Sidebar({ favoritos }: { favoritos: FavoritePair[] }) {
   const pathname = usePathname();
 
   return (
@@ -20,7 +22,7 @@ export function Sidebar() {
       <nav className="flex flex-col gap-0.5">
         <Link
           href="/dashboard"
-          className={`flex items-center gap-2 rounded-lg px-2.5 py-2 transition-colors ${
+          className={`mb-3 flex items-center gap-2 rounded-lg px-2.5 py-2 transition-colors ${
             pathname === "/dashboard" ? "bg-surface-raised" : "hover:bg-surface"
           }`}
         >
@@ -37,6 +39,55 @@ export function Sidebar() {
             Dashboard
           </span>
         </Link>
+
+        <p className="mb-1 px-2.5 text-xs font-medium uppercase tracking-wide text-ink-muted">
+          Favoritos
+        </p>
+
+        {favoritos.length === 0 ? (
+          <p className="px-2.5 text-xs leading-relaxed text-ink-muted">
+            Nenhum par favoritado. Abra um par e clique no{" "}
+            <Heart size={11} strokeWidth={2} className="inline" /> pra acompanhar ele aqui.
+          </p>
+        ) : (
+          favoritos.map((fav) => {
+            const slug = `${fav.tickerA}-${fav.tickerB}`;
+            const active = pathname === `/pair/${slug}`;
+            return (
+              <Link
+                key={fav.par}
+                href={`/pair/${slug}`}
+                className={`group rounded-lg px-2.5 py-2 transition-colors ${
+                  active ? "bg-surface-raised" : "hover:bg-surface"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <PairIcon size={8} muted={!active} />
+                  <span
+                    className={`text-sm font-medium ${
+                      active ? "text-ink-primary" : "text-ink-secondary group-hover:text-ink-primary"
+                    }`}
+                  >
+                    {fav.par}
+                  </span>
+                </div>
+                <div className="mt-0.5 flex items-center gap-1.5 pl-6 text-xs">
+                  <span className="tabular-nums text-ink-muted">
+                    z {fav.zScore !== null ? fav.zScore.toFixed(2) : "—"}
+                  </span>
+                  {fav.estado && (
+                    <>
+                      <span className="text-ink-muted">·</span>
+                      <span style={{ color: statusColor(fav.estado) }} className="font-medium">
+                        {statusLabel[fav.estado]}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </Link>
+            );
+          })
+        )}
       </nav>
 
       <div className="mt-auto px-2.5">

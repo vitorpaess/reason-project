@@ -94,3 +94,11 @@ select
     ) as posicao_aberta
 from pares_config pc
 left join pares_status ps on ps.par = pc.ticker_a || '/' || pc.ticker_b;
+
+-- Pares que o usuário marcou como favorito (botão de coração na página do
+-- par) — só esses aparecem na sidebar esquerda. Estado único e global (o
+-- dashboard não tem contas de usuário separadas), igual a posicoes_manuais.
+create table if not exists pares_favoritos (
+    par       text primary key,
+    criado_em timestamptz not null default now()
+);

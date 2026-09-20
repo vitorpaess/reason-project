@@ -63,7 +63,7 @@ export type ParStatusRow = {
   estado: Estado | null;
 };
 
-function estadoFromRow(zScore: number | null, posicaoAberta: boolean): Estado | null {
+export function estadoFromRow(zScore: number | null, posicaoAberta: boolean): Estado | null {
   if (zScore === null) return null;
   const az = Math.abs(zScore);
   if (posicaoAberta) {

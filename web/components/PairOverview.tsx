@@ -1,5 +1,3 @@
-import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
 import { ENTRY_THRESHOLD, ROLLING_WINDOW_DAYS, type PairDef } from "@/lib/config";
 import { statusColor, statusLabel } from "@/lib/theme";
 import { PairIcon } from "@/lib/pair-icons";
@@ -10,7 +8,9 @@ import { PositionControl } from "@/components/PositionControl";
 import { ThresholdProgress } from "@/components/ThresholdProgress";
 import { PairChartSection } from "@/components/PairChartSection";
 import { CompanyPriceSection } from "@/components/CompanyPriceSection";
+import { HeartButton } from "@/components/HeartButton";
 import { fetchCompanyPriceSeries } from "@/lib/company-prices";
+import { isFavorite } from "@/lib/favorites-repo";
 
 function formatDate(iso: string): string {
   const d = new Date(iso + "T00:00:00");
@@ -20,35 +20,23 @@ function formatDate(iso: string): string {
 export async function PairOverview({
   pairDef,
   status,
-  detailHref,
 }: {
   pairDef: PairDef;
   status: PairStatus;
-  /** Se informado, mostra um link "Ver detalhes" (uso na visão geral /dashboard). */
-  detailHref?: string;
 }) {
   const pronto = status.estado !== null && status.ultimo !== null;
-  const [precoA, precoB] = await Promise.all([
+  const [precoA, precoB, favorito] = await Promise.all([
     fetchCompanyPriceSeries(pairDef.a),
     fetchCompanyPriceSeries(pairDef.b),
+    isFavorite(pairDef.label),
   ]);
 
   return (
-    <div>
-      <div className="mb-7 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <PairIcon slug={pairDef.slug} size={10} />
-          <h1 className="text-xl font-semibold text-ink-primary">{pairDef.label}</h1>
-        </div>
-        {detailHref && (
-          <Link
-            href={detailHref}
-            className="flex items-center gap-1 text-sm font-medium text-ink-muted transition-colors hover:text-ink-primary"
-          >
-            Ver detalhes
-            <ArrowUpRight size={14} strokeWidth={1.75} />
-          </Link>
-        )}
+    <div className="mx-auto max-w-4xl">
+      <div className="mb-7 flex items-center gap-1">
+        <PairIcon slug={pairDef.slug} size={10} />
+        <h1 className="ml-1.5 text-xl font-semibold text-ink-primary">{pairDef.label}</h1>
+        <HeartButton par={pairDef.label} inicial={favorito} />
       </div>
 
       {pronto && status.ultimo ? (
