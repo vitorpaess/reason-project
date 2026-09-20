@@ -1,21 +1,24 @@
-"""Calcula z-score, correlação móvel e sinais de entrada/saída para cada par.
+"""Calcula z-score, correlação móvel e sinal de entrada/saída para cada par.
 
 Um único cálculo: janela móvel de ROLLING_WINDOW_DAYS dias com aquecimento
 adaptativo (min_periods baixo). Do 2º dia até o dia ROLLING_WINDOW_DAYS-1,
 usa todos os dados disponíveis até aquele ponto (a janela do pandas cresce
 sozinha); a partir do dia ROLLING_WINDOW_DAYS, vira uma janela móvel real
-dos últimos N dias, esquecendo dados mais antigos normalmente. Não existe
-mais uma série "expansiva" separada — é a mesma coluna o tempo todo, só
-com amostra menor (e por isso mais ruidosa) nos primeiros dias.
+dos últimos N dias, esquecendo dados mais antigos normalmente.
 
-Essa única série decide sinais de entrada/saída e alimenta tanto os cards
-de status quanto o gráfico e a tabela de histórico de oportunidades.
+Sempre recalcula a série INTEIRA a partir do preço bruto (o sinal de hoje
+depende do estado acumulado — se já tinha uma posição sinalizada aberta —
+então precisa da série completa, não só do dia mais recente), mas só
+PERSISTE a última linha de cada par em pares_status (1 linha por par,
+upsert por chave primária `par`, nunca cresce). O histórico completo pra
+gráfico/tabela de oportunidades é recalculado sob demanda no Next.js
+(TypeScript), a partir do mesmo preço bruto (precos_diarios) — guardar o
+histórico calculado dos ~7,9 mil pares aqui já estourou o armazenamento do
+projeto numa versão anterior.
 
-Lê os preços brutos já salvos no Supabase (nunca recalcula os preços), e
-recalcula a tabela derivada pares_zscore inteira a cada execução — isso é
-intencional: como é uma tabela derivada (não dado bruto), recalculá-la do
-zero a partir dos preços é barato e garante que mudanças de parâmetro
-(threshold, janela) fiquem consistentes em todo o histórico.
+Carrega o preço de TODOS os tickers do Supabase uma vez só no início (não
+1 fetch por ticker por par) — com ~660 tickers compartilhados entre ~7.9k
+pares, buscar por par duplicaria fetches do mesmo ticker dezenas de vezes.
 """
 
 import math
@@ -26,15 +29,25 @@ import config
 import db
 
 
-def _load_pair_frame(ticker_a: str, ticker_b: str) -> pd.DataFrame:
-    precos_a = pd.DataFrame(db.fetch_precos(ticker_a))
-    precos_b = pd.DataFrame(db.fetch_precos(ticker_b))
+def _carregar_precos_por_ticker() -> dict[str, pd.DataFrame]:
+    linhas = db.fetch_todos_precos()
+    df = pd.DataFrame(linhas)
+    if df.empty:
+        return {}
+    return {ticker: grupo.reset_index(drop=True) for ticker, grupo in df.groupby("ticker")}
 
-    if precos_a.empty or precos_b.empty:
+
+def _load_pair_frame(
+    precos_por_ticker: dict[str, pd.DataFrame], ticker_a: str, ticker_b: str
+) -> pd.DataFrame:
+    precos_a = precos_por_ticker.get(ticker_a)
+    precos_b = precos_por_ticker.get(ticker_b)
+
+    if precos_a is None or precos_b is None or precos_a.empty or precos_b.empty:
         return pd.DataFrame()
 
-    precos_a = precos_a.rename(columns={"preco_fechamento": "preco_a"})
-    precos_b = precos_b.rename(columns={"preco_fechamento": "preco_b"})
+    precos_a = precos_a.rename(columns={"preco_fechamento": "preco_a"})[["data", "preco_a"]]
+    precos_b = precos_b.rename(columns={"preco_fechamento": "preco_b"})[["data", "preco_b"]]
 
     df = pd.merge(precos_a, precos_b, on="data", how="inner").sort_values("data")
     df["data"] = pd.to_datetime(df["data"])
@@ -98,57 +111,69 @@ def _num_or_none(value):
     return None if pd.isna(value) else float(value)
 
 
-def _to_rows(df: pd.DataFrame, par: str) -> list[dict]:
-    rows = []
-    for _, row in df.iterrows():
-        rows.append(
-            {
-                "par": par,
-                "data": row["data"].date().isoformat(),
-                "z_score_63d": _num_or_none(row["z_score_63d"]),
-                "correlacao_movel_63d": _num_or_none(row["correlacao_movel_63d"]),
-                "spread": _num_or_none(row["spread"]),
-                "sinal": row["sinal"],
-                "direcao": row["direcao"],
-            }
-        )
-    return rows
+def _ultima_linha_como_status(df: pd.DataFrame, par: str) -> dict:
+    ultimo = df.iloc[-1]
+    return {
+        "par": par,
+        "data": ultimo["data"].date().isoformat(),
+        "z_score_63d": _num_or_none(ultimo["z_score_63d"]),
+        "correlacao_movel_63d": _num_or_none(ultimo["correlacao_movel_63d"]),
+        "spread": _num_or_none(ultimo["spread"]),
+        "sinal": ultimo["sinal"],
+        "direcao": ultimo["direcao"],
+    }
 
 
 def run() -> None:
-    for ticker_a, ticker_b in config.PAIRS:
+    pares = db.fetch_pares_config()
+    if not pares:
+        print("[compute_zscore] pares_config está vazia — rode collect_prices.py antes.")
+        return
+
+    print("[compute_zscore] Carregando preço de todos os tickers (uma vez)...")
+    precos_por_ticker = _carregar_precos_por_ticker()
+    print(f"[compute_zscore] {len(precos_por_ticker)} tickers com preço carregado em memória.")
+
+    status_rows: list[dict] = []
+    sem_dados = 0
+    historico_curto = 0
+    sinais_hoje: list[str] = []
+
+    for i, par_def in enumerate(pares, start=1):
+        if i % 1000 == 0:
+            print(f"[compute_zscore] progresso: {i}/{len(pares)} pares calculados...")
+
+        ticker_a, ticker_b = par_def["ticker_a"], par_def["ticker_b"]
         par = f"{ticker_a}/{ticker_b}"
-        df = _load_pair_frame(ticker_a, ticker_b)
 
+        df = _load_pair_frame(precos_por_ticker, ticker_a, ticker_b)
         if df.empty:
-            print(f"[compute_zscore] {par}: sem dados suficientes ainda (preços não coletados).")
+            sem_dados += 1
             continue
-
         if len(df) < config.MIN_HISTORY_DAYS:
-            print(
-                f"[compute_zscore] AVISO: {par} tem apenas {len(df)} dias de histórico "
-                f"comum entre as duas ações (mínimo recomendado: {config.MIN_HISTORY_DAYS}). "
-                f"Até completar {config.ROLLING_WINDOW_DAYS} dias, o z-score/correlação usam "
-                f"uma amostra menor que a janela cheia — ficam mais ruidosos, não NaN."
-            )
+            historico_curto += 1
 
         df = _compute_signals(df, ticker_a, ticker_b)
-        rows = _to_rows(df, par)
-        db.upsert_zscores(rows)
+        status = _ultima_linha_como_status(df, par)
+        status_rows.append(status)
 
-        ultimo = df.iloc[-1]
-        if not pd.isna(ultimo["z_score_63d"]) and not pd.isna(ultimo["correlacao_movel_63d"]):
-            print(
-                f"[compute_zscore] {par}: {len(rows)} linhas atualizadas. "
-                f"z_score_63d mais recente = {ultimo['z_score_63d']:.3f} "
-                f"| correlação 63d = {ultimo['correlacao_movel_63d']:.3f} "
-                f"| sinal = {ultimo['sinal']}"
-            )
-        else:
-            print(
-                f"[compute_zscore] {par}: {len(rows)} linhas atualizadas "
-                f"(ainda sem z-score/correlação 63d válidos)."
-            )
+        if status["sinal"] in ("entrada", "saida") and status["z_score_63d"] is not None:
+            sinais_hoje.append(f"{par}: {status['sinal']} (z={status['z_score_63d']:.2f})")
+
+    print(f"[compute_zscore] Fazendo upsert de {len(status_rows)} linhas em pares_status...")
+    db.upsert_pares_status(status_rows)
+
+    print(
+        f"[compute_zscore] Concluído: {len(pares)} pares processados "
+        f"({sem_dados} sem dado de preço comum, {historico_curto} com histórico < "
+        f"{config.MIN_HISTORY_DAYS} dias)."
+    )
+    if sinais_hoje:
+        print(f"[compute_zscore] {len(sinais_hoje)} sinal(is) de entrada/saída no último dia:")
+        for linha in sinais_hoje:
+            print(f"  - {linha}")
+    else:
+        print("[compute_zscore] Nenhum sinal de entrada/saída novo no último dia.")
 
 
 if __name__ == "__main__":

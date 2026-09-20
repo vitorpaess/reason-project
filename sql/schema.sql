@@ -1,5 +1,5 @@
 -- Rode este script uma vez no SQL Editor do Supabase (Project > SQL Editor > New query)
--- Cria as duas tabelas usadas pelo sistema de pairs trading.
+-- Cria as tabelas usadas pelo sistema de pairs trading.
 
 create table if not exists precos_diarios (
     id            bigint generated always as identity primary key,
@@ -13,47 +13,9 @@ create table if not exists precos_diarios (
 create index if not exists idx_precos_diarios_ticker_data
     on precos_diarios (ticker, data);
 
--- z_score_63d/correlacao_movel_63d = janela móvel de 63 dias — a única
--- série usada no sistema. Decide sinal/direcao, alimenta o gráfico e o
--- histórico de oportunidades.
-create table if not exists pares_zscore (
-    id                        bigint generated always as identity primary key,
-    par                       text not null,       -- ex: 'RKLB/PL'
-    data                      date not null,
-    z_score_63d               numeric,
-    correlacao_movel_63d      numeric,
-    spread                    numeric,
-    sinal                     text not null default 'nenhum',  -- 'entrada' | 'saida' | 'nenhum'
-    direcao                   text,                 -- ex: 'vender RKLB / comprar PL'
-    criado_em                 timestamptz not null default now(),
-    unique (par, data)
-);
-
-create index if not exists idx_pares_zscore_par_data
-    on pares_zscore (par, data);
-
--- Migração: se a tabela pares_zscore já existia com a coluna antiga
--- "z_score" (antes de separar em z_score_63d), rode isto uma vez.
--- Seguro rodar de novo (idempotente).
-do $$
-begin
-    if exists (
-        select 1 from information_schema.columns
-        where table_name = 'pares_zscore' and column_name = 'z_score'
-    ) then
-        execute 'alter table pares_zscore rename column z_score to z_score_63d';
-    end if;
-end $$;
-
--- Removida a série expansiva (janela expansiva, todos os dias desde o
--- início) — o sistema usa só a janela móvel de 63 dias agora.
-alter table pares_zscore drop column if exists z_score_expansivo;
-alter table pares_zscore drop column if exists correlacao_expansiva;
-
 -- Posições realmente confirmadas pelo usuário no dashboard (botão "Confirmar
--- entrada" / "Confirmar saída"). Separada de pares_zscore de propósito: essa
--- tabela é recalculada inteira todo dia pelo compute_zscore.py, e não deve
--- ser tocada por ela — só o app Next.js escreve aqui.
+-- entrada" / "Confirmar saída"). Não é tocada pelo pipeline Python — só o
+-- app Next.js escreve aqui.
 create table if not exists posicoes_manuais (
     id            bigint generated always as identity primary key,
     par           text not null,
@@ -73,3 +35,62 @@ create unique index if not exists idx_posicoes_manuais_aberta_unica
 
 create index if not exists idx_posicoes_manuais_par
     on posicoes_manuais (par, data_entrada);
+
+-- Lista de pares monitorados + setor — vem da planilha "Pares DATA",
+-- sincronizada por collect_prices.py a cada execução. ticker_a/ticker_b
+-- nunca têm hífen (tickers de bolsa), então o slug "TICKERA-TICKERB" usado
+-- nas rotas do Next.js é sempre reversível de forma inequívoca.
+create table if not exists pares_config (
+    id            bigint generated always as identity primary key,
+    ticker_a      text not null,
+    ticker_b      text not null,
+    setor         text not null,
+    atualizado_em timestamptz not null default now(),
+    unique (ticker_a, ticker_b)
+);
+
+-- Migração: uma versão anterior guardava o histórico INTEIRO de z-score
+-- calculado (pares_zscore, 1 linha por par por dia) — com ~7,9 mil pares
+-- isso estourou o limite de armazenamento do projeto (dezenas de milhões
+-- de linhas em potencial). O histórico completo agora é recalculado sob
+-- demanda na página de cada par (TypeScript, a partir do preço bruto em
+-- precos_diarios, que é barato de guardar) — só o status MAIS RECENTE de
+-- cada par fica persistido, em pares_status (1 linha por par, sempre
+-- sobrescrita, nunca cresce). Rode isto uma vez pra migrar; seguro rodar
+-- de novo (idempotente).
+drop view if exists pares_status_atual;
+drop table if exists pares_zscore;
+
+create table if not exists pares_status (
+    par                   text primary key,     -- ex: 'RKLB/PL'
+    data                  date not null,
+    z_score_63d           numeric,
+    correlacao_movel_63d  numeric,
+    spread                numeric,
+    sinal                 text not null default 'nenhum',  -- 'entrada' | 'saida' | 'nenhum'
+    direcao               text,                  -- ex: 'vender RKLB / comprar PL'
+    atualizado_em         timestamptz not null default now()
+);
+
+-- Junta pares_config + o status mais recente (1:1 agora, não precisa mais
+-- de lateral join) + se tem posição aberta — é o que alimenta a tabela do
+-- dashboard (~7,9k pares) sem precisar de 1 query por par. Os limiares de
+-- entrada/saída (1.20/0.50) NÃO entram aqui de propósito — ficam só em
+-- lib/config.ts (TS) e config.py (Python), pra não duplicar a regra de
+-- negócio em dois lugares.
+create or replace view pares_status_atual as
+select
+    pc.ticker_a,
+    pc.ticker_b,
+    pc.ticker_a || '/' || pc.ticker_b as par,
+    pc.setor,
+    ps.data,
+    ps.z_score_63d,
+    abs(ps.z_score_63d) as z_abs,
+    ps.correlacao_movel_63d,
+    exists (
+        select 1 from posicoes_manuais pm
+        where pm.par = pc.ticker_a || '/' || pc.ticker_b and pm.data_saida is null
+    ) as posicao_aberta
+from pares_config pc
+left join pares_status ps on ps.par = pc.ticker_a || '/' || pc.ticker_b;
