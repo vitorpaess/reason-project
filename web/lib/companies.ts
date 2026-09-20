@@ -96,4 +96,30 @@ export const COMPANIES: Record<string, CompanyInfo> = {
     descricao:
       "Fundada em 1947 e sediada na Cidade do Panamá, a Copa Holdings controla a Copa Airlines, companhia aérea que conecta América Central, América do Sul, América do Norte e o Caribe através do hub de conexões no Aeroporto Internacional de Tocumen, no Panamá.",
   },
+  MSEX: {
+    ticker: "MSEX",
+    nome: "Middlesex Water",
+    bolsa: "NASDAQ",
+    setor: "Utilities · Água regulada",
+    dominio: "middlesexwater.com",
+    website: "https://www.middlesexwater.com",
+    cik: "0000066004",
+    funcionarios: 395,
+    receitaTtmUsd: 206141000,
+    descricao:
+      "Fundada em 1896 e sediada em Iselin, Nova Jersey, a Middlesex Water fornece água e serviços de esgoto para clientes residenciais, comerciais e industriais, com operações reguladas em Nova Jersey e Delaware, além de contratos de gestão de infraestrutura municipal e privada de água/esgoto nesses estados.",
+  },
+  YORW: {
+    ticker: "YORW",
+    nome: "York Water",
+    bolsa: "NASDAQ",
+    setor: "Utilities · Água regulada",
+    dominio: "yorkwater.com",
+    website: "https://www.yorkwater.com",
+    cik: "0000108985",
+    funcionarios: 129,
+    receitaTtmUsd: 83422000,
+    descricao:
+      "Fundada em 1816 e sediada em York, Pensilvânia, a York Water é considerada uma das concessionárias de água mais antigas dos Estados Unidos em operação contínua, atendendo 51 comunidades no centro-sul da Pensilvânia a partir dos reservatórios Lake Williams e Lake Redman.",
+  },
 };

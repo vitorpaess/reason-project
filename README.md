@@ -1,6 +1,7 @@
 # Pairs Trading Monitor
 
-Monitoramento de pairs trading para RKLB/PL (espacial), RPD/TENB (cybersecurity) e ALGT/CPA (aéreas).
+Monitoramento de pairs trading para RKLB/PL (espacial), RPD/TENB (cybersecurity),
+ALGT/CPA (aéreas) e MSEX/YORW (concessionárias de água).
 
 ## Setup
 
