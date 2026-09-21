@@ -5,8 +5,7 @@ import { RANGE_OPTIONS, rangeStartDate, type RangeKey } from "@/lib/date-ranges"
 import type { SignalEvent, ZScoreRow } from "@/lib/pairs-data";
 import { ZScoreChart } from "@/components/ZScoreChart";
 import { SignalHistoryTable } from "@/components/SignalHistoryTable";
-import { CorrelationChart } from "@/components/CorrelationChart";
-import { CorrelationTrendBadge } from "@/components/CorrelationTrendCard";
+import { MeanReversionSection } from "@/components/MeanReversionSection";
 
 export function PairChartSection({
   rows,
@@ -98,13 +97,7 @@ export function PairChartSection({
         <SignalHistoryTable oportunidades={filteredOportunidades} />
       </div>
 
-      <div className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow-card)]">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-ink-secondary">Correlação móvel</h2>
-          <CorrelationTrendBadge rows={filteredRows} />
-        </div>
-        <CorrelationChart rows={filteredRows} />
-      </div>
+      <MeanReversionSection rows={rows} oportunidades={oportunidades} />
     </div>
   );
 }

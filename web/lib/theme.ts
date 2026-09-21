@@ -15,6 +15,11 @@ export const colors = {
   seriesZScore: "#3987e5",
   statusCritical: "#d03b3b",
   statusGood: "#0ca30c",
+  // Amarelo de alerta (status "warning") — paleta fixa do skill de dataviz,
+  // validada em separado da categórica (>=3:1 na superfície escura). Usado
+  // só pro card de "tempo em posição ÷ meia-vida" (3 níveis: verde/amarelo/
+  // vermelho), não como cor de série.
+  statusWarning: "#fab219",
 } as const;
 
 export function hexToRgba(hex: string, alpha: number): string {
