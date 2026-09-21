@@ -122,5 +122,7 @@ export function computeZScoreSeries(precosA: PricePoint[], precosB: PricePoint[]
     z_score_63d: zScore[i],
     correlacao_movel_63d: correlacao[i],
     spread: spread[i],
+    retorno_a: retornoA[i],
+    retorno_b: retornoB[i],
   }));
 }

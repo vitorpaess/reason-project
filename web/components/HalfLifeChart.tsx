@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import type { DotProps } from "recharts";
 import { colors } from "@/lib/theme";
+import { pickTicks } from "@/lib/chart-utils";
 import type { HalfLifePoint } from "@/lib/mean-reversion";
 
 // Meia-vida pode disparar pra centenas/milhares de dias quando b fica bem
@@ -34,21 +35,6 @@ type ChartPoint = {
 function formatDate(iso: string): string {
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" });
-}
-
-/** Amostra até `maxTicks` datas igualmente espaçadas por índice (não por
- * pixel) — ao contrário do sampling automático do Recharts pra eixo de
- * categoria, isso garante ordem cronológica por construção, já que só
- * percorre o array (já ordenado) uma vez pra frente. */
-function pickTicks(dates: string[], maxTicks: number): string[] {
-  if (dates.length <= maxTicks) return dates;
-  const passo = (dates.length - 1) / (maxTicks - 1);
-  const escolhidas: string[] = [];
-  for (let i = 0; i < maxTicks; i++) {
-    const idx = Math.min(dates.length - 1, Math.round(i * passo));
-    escolhidas.push(dates[idx]);
-  }
-  return Array.from(new Set(escolhidas));
 }
 
 function ChartTooltip({

@@ -11,6 +11,11 @@ export type ZScoreRow = {
   z_score_63d: number | null;
   correlacao_movel_63d: number | null;
   spread: number | null;
+  // Retorno diário (pct_change) de cada ticker — já calculado internamente
+  // pra correlação/spread, exposto aqui pra lib/mean-reversion.ts (beta
+  // móvel, ADF) não precisar refazer o alinhamento de datas dos preços.
+  retorno_a: number | null;
+  retorno_b: number | null;
 };
 
 export type SignalEvent = {

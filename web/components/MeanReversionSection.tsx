@@ -2,17 +2,22 @@ import { colors } from "@/lib/theme";
 import { EXIT_THRESHOLD } from "@/lib/config";
 import { StatusPill } from "@/components/StatusPill";
 import { HalfLifeChart } from "@/components/HalfLifeChart";
+import { HedgeRatioChart } from "@/components/HedgeRatioChart";
 import type { ZScoreRow } from "@/lib/pairs-data";
 import {
+  BETA_WINDOW,
   CORRELACAO_MINIMA_SAUDAVEL,
   HALFLIFE_ALERT_RATIO,
   HALFLIFE_LONG_WINDOW,
   HALFLIFE_SHORT_WINDOW,
   POSICAO_RATIO_AMARELO,
   POSICAO_RATIO_VERMELHO,
+  adfTest,
+  compararBetaAoRedorDaQuebra,
   computeCUSUM,
   diasForaDoEquilibrio,
   medianaValida,
+  rollingBeta,
   rollingHalfLife,
   type HalfLifePoint,
 } from "@/lib/mean-reversion";
@@ -41,6 +46,8 @@ export function MeanReversionSection({
   const curta = rollingHalfLife(rows, HALFLIFE_SHORT_WINDOW);
   const longa = rollingHalfLife(rows, HALFLIFE_LONG_WINDOW);
   const cusum = computeCUSUM(rows);
+  const beta = rollingBeta(rows, BETA_WINDOW);
+  const adf = adfTest(rows);
 
   const ultimaCurta = ultimoValido(curta);
   const ultimaLonga = ultimoValido(longa);
@@ -79,15 +86,26 @@ export function MeanReversionSection({
           ? colors.statusWarning
           : colors.statusCritical;
 
+  const betaComparacao =
+    cusum.ultimaQuebraIdx !== null
+      ? compararBetaAoRedorDaQuebra(rows, cusum.ultimaQuebraIdx, BETA_WINDOW)
+      : null;
+
   return (
     <div className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow-card)]">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-ink-secondary">Reversão à média do spread</h2>
         <div className="flex flex-wrap items-center gap-1.5">
           <StatusPill label={correlacaoLabel} color={correlacaoOk ? colors.statusGood : colors.inkMuted} />
-          {cusum.quebraData && (
+          {adf && (
             <StatusPill
-              label={`Quebra recente · ${formatDate(cusum.quebraData)}`}
+              label={`ADF p ${adf.pFaixa}`}
+              color={adf.estacionario ? colors.statusGood : colors.inkMuted}
+            />
+          )}
+          {cusum.quebraRecenteData && (
+            <StatusPill
+              label={`Quebra recente · ${formatDate(cusum.quebraRecenteData)}`}
               color={colors.statusCritical}
             />
           )}
@@ -122,6 +140,38 @@ export function MeanReversionSection({
             {diasForaEquilibrio === null
               ? "Sem z-score calculado ainda."
               : "Histórico insuficiente pra estimar a mediana da meia-vida."}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-5 border-t border-border pt-4">
+        <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+          Estabilidade do hedge ratio (beta móvel, {BETA_WINDOW}d)
+        </h3>
+        <HedgeRatioChart pontos={beta} />
+
+        {betaComparacao && (betaComparacao.betaAntes !== null || betaComparacao.betaDepois !== null) && (
+          <div className="mt-3 rounded-lg bg-surface-raised px-3.5 py-2.5">
+            <div className="text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+              Beta antes vs. depois da última quebra ({formatDate(cusum.ultimaQuebraData as string)})
+            </div>
+            <div className="mt-1 flex items-baseline gap-2 text-xs text-ink-secondary">
+              <span className="tabular-nums text-ink-primary">
+                {betaComparacao.betaAntes !== null ? betaComparacao.betaAntes.toFixed(2) : "—"}
+              </span>
+              <span>→</span>
+              <span
+                className="font-semibold tabular-nums"
+                style={{ color: betaComparacao.mudancaRelevante ? colors.statusWarning : colors.statusGood }}
+              >
+                {betaComparacao.betaDepois !== null ? betaComparacao.betaDepois.toFixed(2) : "—"}
+              </span>
+              <span className="text-ink-muted">
+                {betaComparacao.mudancaRelevante
+                  ? "— mudança relevante, considere reestimar os parâmetros"
+                  : "— hedge ratio estável, quebra provavelmente é só deslocamento de nível"}
+              </span>
+            </div>
           </div>
         )}
       </div>
