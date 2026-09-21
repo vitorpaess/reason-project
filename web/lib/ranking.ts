@@ -77,21 +77,37 @@ export type TaxaReversaoBruta = {
   sucessos: number;
   n: number;
   diasMedianosSucesso: number | null;
+  /** Média de (|z| de saída − |z| de entrada), em σ, das falhas deste par —
+   * null se numFalhas < 3 (amostra de falhas curta demais pra confiar na
+   * média; ver computeMetricasBrutas pro fallback). */
+  perdaMediaZ: number | null;
+  numFalhas: number;
 };
+
+function mediaSimples(valores: number[]): number {
+  return valores.reduce((a, b) => a + b, 0) / valores.length;
+}
 
 /**
  * Entre as excursões passadas do z-score com |z| dentro de ±TOLERANCIA_Z do
- * valor atual e mesmo sinal, qual fração voltou a |z| < Z_SAIDA dentro de
- * `prazoMaxLinhas` linhas da série. Dias consecutivos dentro da faixa
- * contam como UMA excursão (uma amostra), não uma por dia — do contrário um
- * regime persistente de 40 dias inflaria n artificialmente.
+ * valor atual e mesmo sinal (usando o z como era calculado na época — a
+ * série de z-score já é isso, não é recalculada), qual fração voltou a
+ * |z| < Z_SAIDA antes de bater o stop e dentro de `prazoMaxLinhas` linhas
+ * da série. Dias consecutivos dentro da faixa contam como UMA excursão
+ * (uma amostra), não uma por dia — do contrário um regime persistente de
+ * 40 dias inflaria n artificialmente.
  *
- * Uma excursão só vira amostra se o desfecho é conhecido: sucesso (achou
- * |z|<Z_SAIDA dentro do prazo) ou fracasso CONFIRMADO (o prazo inteiro
- * coube no histórico observado sem sucesso). Se o histórico acaba no meio
- * da janela de observação sem sucesso, a excursão é censurada e descartada
- * — é assim que a excursão ATUAL (ainda em curso) fica de fora da própria
- * amostra que tenta prevê-la.
+ * Dia a dia a partir da entrada: sucesso se |z| < Z_SAIDA antes de
+ * |z| >= Z_STOP; falha se o stop é tocado primeiro OU o prazo esgota sem
+ * sucesso (empate no mesmo dia conta como falha — checado nessa ordem,
+ * mas os dois são fisicamente exclusivos já que Z_STOP > Z_SAIDA). Falha
+ * por prazo encerra no último dia do prazo.
+ *
+ * Uma excursão só vira amostra se o desfecho é conhecido (sucesso ou falha
+ * confirmada). Se o histórico acaba no meio da janela de observação sem
+ * nenhum dos dois, a excursão é censurada e descartada — é assim que a
+ * excursão ATUAL (ainda em curso) fica de fora da própria amostra que
+ * tenta prevê-la.
  */
 export function taxaReversaoHistorica(
   rows: ZScoreRow[],
@@ -108,6 +124,7 @@ export function taxaReversaoHistorica(
 
   let emBanda = false;
   const sucessosDias: number[] = [];
+  const falhasDeltaZ: number[] = [];
   let sucessos = 0;
   let n = 0;
 
@@ -121,33 +138,61 @@ export function taxaReversaoHistorica(
     const dentro = Math.sign(z) === sinal && az >= bandaInf && az <= bandaSup;
 
     if (dentro && !emBanda) {
-      const fimJanela = Math.min(i + prazoMaxLinhas, ultimoIdx);
-      let sucesso = false;
+      const azEntrada = az;
+      const fimJanela = i + prazoMaxLinhas;
+      const fimObservavel = Math.min(fimJanela, ultimoIdx);
+
+      let resultado: "sucesso" | "falha" | null = null;
       let dias: number | null = null;
-      for (let j = i; j <= fimJanela; j++) {
+      let azSaida: number | null = null;
+
+      for (let j = i; j <= fimObservavel; j++) {
         const zj = zs[j];
-        if (zj !== null && Math.abs(zj) < Z_SAIDA) {
-          sucesso = true;
+        if (zj === null) continue;
+        const azj = Math.abs(zj);
+        if (azj < Z_SAIDA) {
+          resultado = "sucesso";
           dias = j - i;
+          azSaida = azj;
+          break;
+        }
+        if (azj >= Z_STOP) {
+          resultado = "falha";
+          dias = j - i;
+          azSaida = azj;
+          break;
+        }
+        if (j === fimJanela) {
+          resultado = "falha";
+          dias = j - i;
+          azSaida = azj;
           break;
         }
       }
-      // Só é amostra válida se: teve sucesso (desfecho conhecido, mesmo
-      // perto do fim da série) OU a janela inteira de prazoMaxLinhas coube
-      // no histórico (fracasso confirmado, não censurado).
-      const resolvido = sucesso || i + prazoMaxLinhas <= ultimoIdx;
-      if (resolvido) {
+
+      if (resultado !== null) {
         n++;
-        if (sucesso) {
+        if (resultado === "sucesso") {
           sucessos++;
           if (dias !== null) sucessosDias.push(dias);
+        } else if (azSaida !== null) {
+          falhasDeltaZ.push(azSaida - azEntrada);
         }
       }
+      // resultado === null: censurada (série acabou antes do prazo
+      // terminar sem sucesso nem stop) — não conta como amostra.
     }
     emBanda = dentro;
   }
 
-  return { sucessos, n, diasMedianosSucesso: medianaSimples(sucessosDias) };
+  const numFalhas = falhasDeltaZ.length;
+  return {
+    sucessos,
+    n,
+    diasMedianosSucesso: medianaSimples(sucessosDias),
+    perdaMediaZ: numFalhas >= 3 ? mediaSimples(falhasDeltaZ) : null,
+    numFalhas,
+  };
 }
 
 // ---- Métricas por par ----------------------------------------------------
@@ -159,7 +204,10 @@ export type MetricasBrutas = {
   setor: string;
   zAtual: number | null;
   ganho: number | null; // (|z|-Z_SAIDA) × σ_spread
-  perda: number | null; // (Z_STOP-|z|) × σ_spread — null se |z| >= Z_STOP
+  // Perda realizada em σ_spread atual: média de (|z| saída − |z| entrada)
+  // das falhas deste par se numFalhas >= 3, senão (Z_STOP-|z|) × σ_spread
+  // como aproximação — ver taxaReversaoHistorica. Null se |z| >= Z_STOP.
+  perda: number | null;
   custo: number | null;
   ganhoPorDia: number | null;
   meiaVidaMediana: number | null;
@@ -195,7 +243,7 @@ export function computeMetricasBrutas(
       custo: null,
       ganhoPorDia: null,
       meiaVidaMediana: null,
-      taxa: { sucessos: 0, n: 0, diasMedianosSucesso: null },
+      taxa: { sucessos: 0, n: 0, diasMedianosSucesso: null, perdaMediaZ: null, numFalhas: 0 },
       motivos: ["Sem dados de preço"],
     };
   }
@@ -253,7 +301,7 @@ export function computeMetricasBrutas(
       custo: null,
       ganhoPorDia: null,
       meiaVidaMediana,
-      taxa: { sucessos: 0, n: 0, diasMedianosSucesso: null },
+      taxa: { sucessos: 0, n: 0, diasMedianosSucesso: null, perdaMediaZ: null, numFalhas: 0 },
       motivos,
     };
   }
@@ -262,18 +310,23 @@ export function computeMetricasBrutas(
   const ganho = (az - Z_SAIDA) * sigma;
   const ganhoPorDia = ganho / meiaVidaMediana;
 
+  const prazoMaxLinhas = Math.round(PRAZO_MAX_MULT_MEIA_VIDA * meiaVidaMediana);
+  const taxa = taxaReversaoHistorica(rows, zAtual, prazoMaxLinhas);
+
   let perda: number | null = null;
   if (az >= Z_STOP) {
     motivos.push(`Z além do stop (${zAtual.toFixed(2)})`);
   } else {
-    perda = (Z_STOP - az) * sigma;
+    // Perda realizada: média das falhas deste par (|z| saída − |z| entrada,
+    // pode ser negativa) se houver pelo menos 3; com menos falhas a média
+    // amostral é ruído demais pra confiar, então cai de volta na
+    // aproximação formulaica (distância até o stop a partir do z atual).
+    const perdaZ = taxa.numFalhas >= 3 ? (taxa.perdaMediaZ as number) : Z_STOP - az;
+    perda = perdaZ * sigma;
   }
 
   const custo =
     4 * (COMISSAO_PCT + SLIPPAGE_PCT) + (ALUGUEL_ANUAL_PCT / 252) * meiaVidaMediana;
-
-  const prazoMaxLinhas = Math.round(PRAZO_MAX_MULT_MEIA_VIDA * meiaVidaMediana);
-  const taxa = taxaReversaoHistorica(rows, zAtual, prazoMaxLinhas);
 
   return {
     par,

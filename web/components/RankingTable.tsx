@@ -15,7 +15,7 @@ const COLUNAS: { header: string; className: string; tooltip: string }[] = [
     header: "Taxa de reversão",
     className: "text-right",
     tooltip:
-      "P_ajustada = (sucessos + k_shrink × P_geral) ÷ (n + k_shrink) — sucessos/n vêm de excursões passadas com |z| parecido; P_geral é a taxa média de todos os pares",
+      "Episódio = 1ª entrada de |z| na faixa ±tolerância_z do z atual (mesmo sinal), com o z como era calculado na época. Sucesso: |z| < z_saída antes de |z| ≥ z_stop e dentro do prazo_max. Falha: stop tocado primeiro ou prazo esgotado (empate no mesmo dia = falha). P_ajustada = (sucessos + k_shrink × P_geral) ÷ (n + k_shrink); P_geral é a taxa média (agrupada) de todos os pares",
   },
   {
     header: "Custo",
@@ -27,7 +27,7 @@ const COLUNAS: { header: string; className: string; tooltip: string }[] = [
     header: "Score",
     className: "text-right",
     tooltip:
-      "[P_ajustada × Ganho − (1 − P_ajustada) × Perda − Custo] ÷ dias esperados (meia-vida mediana) — pode ser negativo",
+      "[P_ajustada × Ganho − (1 − P_ajustada) × Perda − Custo] ÷ dias esperados (meia-vida mediana) — pode ser negativo. Perda = média de (|z| saída − |z| entrada) das falhas deste par em σ_spread atual (se ≥3 falhas; senão z_stop − |z| atual), também pode ser negativa",
   },
 ];
 
