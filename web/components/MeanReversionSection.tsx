@@ -1,8 +1,13 @@
+"use client";
+
+import { useState } from "react";
 import { colors } from "@/lib/theme";
 import { EXIT_THRESHOLD } from "@/lib/config";
+import { rangeStartDate, type RangeKey } from "@/lib/date-ranges";
 import { StatusPill } from "@/components/StatusPill";
 import { HalfLifeChart } from "@/components/HalfLifeChart";
 import { HedgeRatioChart } from "@/components/HedgeRatioChart";
+import { PeriodFilter } from "@/components/PeriodFilter";
 import type { ZScoreRow } from "@/lib/pairs-data";
 import {
   BETA_WINDOW,
@@ -37,10 +42,11 @@ function ultimoValido(pontos: HalfLifePoint[]): HalfLifePoint | null {
 export function MeanReversionSection({
   rows,
 }: {
-  /** Histórico completo (não filtrado pelo seletor de período) — esses
-   * indicadores são leituras de "regime atual" e ficam mais confiáveis
-   * com o máximo de histórico disponível, não com uma janela curta que o
-   * usuário pode ter selecionado só pra olhar o gráfico de z-score. */
+  /** Histórico completo (não filtrado pelo seletor de período do gráfico de
+   * z-score) — os cálculos aqui dentro são leituras de "regime atual" e
+   * ficam mais confiáveis com o máximo de histórico disponível. Esta seção
+   * tem seu próprio seletor de período, que afeta só a janela exibida nos
+   * gráficos, não os cálculos em si (ver comentário mais abaixo). */
   rows: ZScoreRow[];
 }) {
   const curta = rollingHalfLife(rows, HALFLIFE_SHORT_WINDOW);
@@ -48,6 +54,28 @@ export function MeanReversionSection({
   const cusum = computeCUSUM(rows);
   const beta = rollingBeta(rows, BETA_WINDOW);
   const adf = adfTest(rows);
+
+  // Período afeta só a janela exibida nos gráficos abaixo — os cálculos em
+  // si (meia-vida, CUSUM, beta, ADF) sempre rodam sobre o histórico
+  // completo em `rows`, porque dependem de janelas móveis longas (até 200d)
+  // que ficariam incompletas ou distorcidas se recalculadas só dentro do
+  // período selecionado.
+  const [range, setRange] = useState<RangeKey>("TUDO");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
+
+  const dataMin = rows.length > 0 ? rows[0].data : null;
+  const dataMax = rows.length > 0 ? rows[rows.length - 1].data : null;
+  const periodoStart =
+    range === "CUSTOM" ? customStart || dataMin : dataMax ? rangeStartDate(range, dataMax) : null;
+  const periodoEnd = range === "CUSTOM" ? customEnd || dataMax : null;
+
+  const dentroDoPeriodo = (data: string) =>
+    (!periodoStart || data >= periodoStart) && (!periodoEnd || data <= periodoEnd);
+
+  const curtaExibida = curta.filter((p) => dentroDoPeriodo(p.data));
+  const longaExibida = longa.filter((p) => dentroDoPeriodo(p.data));
+  const betaExibido = beta.filter((p) => dentroDoPeriodo(p.data));
 
   const ultimaCurta = ultimoValido(curta);
   const ultimaLonga = ultimoValido(longa);
@@ -113,7 +141,18 @@ export function MeanReversionSection({
         </div>
       </div>
 
-      <HalfLifeChart curta={curta} longa={longa} />
+      <PeriodFilter
+        range={range}
+        onRangeChange={setRange}
+        customStart={customStart}
+        customEnd={customEnd}
+        onCustomStartChange={setCustomStart}
+        onCustomEndChange={setCustomEnd}
+        dataMin={dataMin}
+        dataMax={dataMax}
+      />
+
+      <HalfLifeChart curta={curtaExibida} longa={longaExibida} />
       <p className="mt-2 text-[11px] leading-relaxed text-ink-muted">
         A meia-vida mede reversão em torno da média local de cada janela, não da média histórica
         do z-score — um patamar novo que já domina boa parte da janela pode parecer &ldquo;revertendo
@@ -148,7 +187,7 @@ export function MeanReversionSection({
         <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-muted">
           Estabilidade do hedge ratio (beta móvel, {BETA_WINDOW}d)
         </h3>
-        <HedgeRatioChart pontos={beta} />
+        <HedgeRatioChart pontos={betaExibido} />
 
         {betaComparacao && (betaComparacao.betaAntes !== null || betaComparacao.betaDepois !== null) && (
           <div className="mt-3 rounded-lg bg-surface-raised px-3.5 py-2.5">

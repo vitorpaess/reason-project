@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { RANGE_OPTIONS, rangeStartDate, type RangeKey } from "@/lib/date-ranges";
+import { rangeStartDate, type RangeKey } from "@/lib/date-ranges";
 import type { SignalEvent, ZScoreRow } from "@/lib/pairs-data";
 import { ZScoreChart } from "@/components/ZScoreChart";
 import { SignalHistoryTable } from "@/components/SignalHistoryTable";
 import { MeanReversionSection } from "@/components/MeanReversionSection";
+import { PeriodFilter } from "@/components/PeriodFilter";
 
 export function PairChartSection({
   rows,
@@ -45,43 +46,16 @@ export function PairChartSection({
   return (
     <div>
       <div className="mb-6 rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow-card)]">
-        <div className="mb-4 flex flex-wrap items-center justify-end gap-x-1 gap-y-2">
-          {range === "CUSTOM" && (
-            <div className="mr-auto flex items-center gap-2 text-xs text-ink-muted">
-              <input
-                type="date"
-                value={customStart || dataMin || ""}
-                min={dataMin ?? undefined}
-                max={customEnd || dataMax || undefined}
-                onChange={(e) => setCustomStart(e.target.value)}
-                className="rounded-md border border-border-strong bg-surface-raised px-2 py-1 text-ink-secondary outline-none focus:border-series"
-              />
-              <span>até</span>
-              <input
-                type="date"
-                value={customEnd || dataMax || ""}
-                min={customStart || dataMin || undefined}
-                max={dataMax ?? undefined}
-                onChange={(e) => setCustomEnd(e.target.value)}
-                className="rounded-md border border-border-strong bg-surface-raised px-2 py-1 text-ink-secondary outline-none focus:border-series"
-              />
-            </div>
-          )}
-          {RANGE_OPTIONS.map((opt) => (
-            <button
-              key={opt.key}
-              type="button"
-              onClick={() => setRange(opt.key)}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                range === opt.key
-                  ? "bg-surface-raised text-ink-primary"
-                  : "text-ink-muted hover:text-ink-secondary"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+        <PeriodFilter
+          range={range}
+          onRangeChange={setRange}
+          customStart={customStart}
+          customEnd={customEnd}
+          onCustomStartChange={setCustomStart}
+          onCustomEndChange={setCustomEnd}
+          dataMin={dataMin}
+          dataMax={dataMax}
+        />
 
         {filteredRows.length === 0 ? (
           <p className="py-16 text-center text-sm text-ink-muted">
