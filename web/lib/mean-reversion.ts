@@ -27,7 +27,7 @@ export const CUSUM_RECENTE_DIAS = 30;
 export const CORRELACAO_MINIMA_SAUDAVEL = 0.5;
 // ------------------------------------------------------------------------
 
-function diasEntreDatas(a: string, b: string): number {
+export function diasEntreDatas(a: string, b: string): number {
   const msPorDia = 1000 * 60 * 60 * 24;
   return Math.round((new Date(b + "T00:00:00").getTime() - new Date(a + "T00:00:00").getTime()) / msPorDia);
 }

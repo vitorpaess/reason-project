@@ -173,6 +173,31 @@ export async function fetchParesTable(params: ParesTableParams): Promise<ParesTa
   return { rows, total: count ?? 0, page, pageSize };
 }
 
+export type ParComSetor = PairDef & { setor: string };
+
+/** Todos os pares configurados, com setor — usado pelo ranking de
+ * oportunidades (lib/ranking-repo.ts), que precisa da lista completa (não
+ * paginada como fetchParesTable) pra computar o ranking sobre o universo
+ * inteiro de pares antes de qualquer filtro de tela. */
+export async function fetchTodosPares(): Promise<ParComSetor[]> {
+  const pares: ParComSetor[] = [];
+  const pageSize = 1000;
+  let from = 0;
+  for (;;) {
+    const { data, error } = await supabase()
+      .from("pares_config")
+      .select("ticker_a,ticker_b,setor")
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(`Falha ao buscar pares: ${error.message}`);
+    for (const row of data ?? []) {
+      pares.push({ ...toPairDef(row), setor: row.setor as string });
+    }
+    if (!data || data.length < pageSize) break;
+    from += pageSize;
+  }
+  return pares;
+}
+
 export async function fetchSetores(): Promise<string[]> {
   // Sem paginação, o Supabase corta em 1000 linhas por padrão — com ~7.9k
   // pares isso poderia esconder setores raros (ex: só 2 pares em "Energy").

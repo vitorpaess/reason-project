@@ -16,6 +16,10 @@ export type ZScoreRow = {
   // móvel, ADF) não precisar refazer o alinhamento de datas dos preços.
   retorno_a: number | null;
   retorno_b: number | null;
+  // Desvio-padrão móvel do spread (mesma janela de 63d do z-score) — usado
+  // por lib/ranking.ts pra converter distância em z em % esperado de
+  // movimento do spread.
+  desvio_spread_63d: number | null;
 };
 
 export type SignalEvent = {

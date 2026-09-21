@@ -1,0 +1,396 @@
+// Ranking de oportunidades — combina indicadores que já existem (spread,
+// z-score, meia-vida, correlação, CUSUM, beta móvel) num score comparável
+// entre pares. Módulo puro (sem I/O): recebe a série ZScoreRow já calculada
+// de cada par (ver lib/zscore-calc.ts) e devolve as métricas + o score.
+// Orquestração (buscar todos os pares/preços e chamar isto em lote) fica em
+// lib/ranking-repo.ts.
+
+import type { ZScoreRow } from "./pairs-data";
+import {
+  BETA_WINDOW,
+  computeCUSUM,
+  diasEntreDatas,
+  medianaValida,
+  rollingBeta,
+  rollingHalfLife,
+  HALFLIFE_LONG_WINDOW,
+  type BetaPoint,
+} from "./mean-reversion";
+import { EXIT_THRESHOLD } from "./config";
+
+// ---- Parâmetros configuráveis ----------------------------------------
+// z de saída — mesmo limiar já usado em todo o resto do app (config.EXIT_THRESHOLD).
+// Mantido como constante própria aqui (em vez de só reexportar) porque é um
+// parâmetro explícito do ranking, não um detalhe emprestado de outro módulo.
+export const Z_SAIDA = EXIT_THRESHOLD;
+// Stop de risco: |z| a partir do qual a posição é considerada perdida, não
+// mais uma oportunidade de entrada — pares com |z| atual além disso saem do
+// ranking com o motivo "z além do stop" (ver computeMetricasBrutas).
+export const Z_STOP = 3.0;
+// Faixa (em |z|) pra considerar uma entrada passada "parecida" com a atual.
+export const TOLERANCIA_Z = 0.3;
+// prazo_max = este múltiplo × a meia-vida mediana (janela longa) do par —
+// medido em linhas da série (~dias úteis), mesma unidade "informal de dias"
+// já usada pro resto do app (ex.: HalfLifeChart mostra a meia-vida em "Xd"
+// vindo direto da regressão por linha, sem diferenciar dia útil de
+// corrido). Ver taxaReversaoHistorica.
+export const PRAZO_MAX_MULT_MEIA_VIDA = 2;
+// Abaixo disso, a taxa de reversão é marcada "amostra insuficiente" (mas o
+// score ainda é calculado — o ajuste por encolhimento abaixo existe
+// justamente pra isso).
+export const N_MIN = 8;
+// Força do encolhimento da taxa de reversão de cada par em direção à taxa
+// geral (P_geral, calculada com todos os pares do ranking) — quanto maior,
+// mais um par com poucos episódios se parece com a média do universo em vez
+// do próprio histórico curto.
+export const K_SHRINK = 5;
+
+// Custo por execução e aluguel da ponta vendida — ESTIMATIVAS, não vieram
+// de nenhuma fonte de dados do projeto (não há corretora/custodiante
+// integrado). Ajuste aqui pros valores reais da sua corretora/ativos antes
+// de usar o score pra decisão real; ver explicação no fim da implementação.
+export const COMISSAO_PCT = 0.0005; // 0,05% por execução
+export const SLIPPAGE_PCT = 0.0005; // 0,05% por execução
+export const ALUGUEL_ANUAL_PCT = 0.02; // 2% ao ano sobre a ponta vendida
+
+// Filtros de elegibilidade (aplicados antes do ranking — ver finalizarRanking).
+export const CORR_MIN = 0.5;
+export const DIAS_SEM_QUEBRA = 60;
+export const BETA_VAR_MAX = 0.2; // 20%
+// Sem fonte de volume nos dados hoje (a planilha "Preços DATA" só tem
+// fechamento) — o filtro de liquidez mínima do enunciado não é aplicado.
+// Ver explicação no fim da implementação.
+// ------------------------------------------------------------------------
+
+function medianaSimples(valores: number[]): number | null {
+  if (valores.length === 0) return null;
+  const ordenados = [...valores].sort((a, b) => a - b);
+  const meio = Math.floor(ordenados.length / 2);
+  return ordenados.length % 2 === 0
+    ? (ordenados[meio - 1] + ordenados[meio]) / 2
+    : ordenados[meio];
+}
+
+// ---- Métrica 2: taxa de reversão histórica -----------------------------
+
+export type TaxaReversaoBruta = {
+  sucessos: number;
+  n: number;
+  diasMedianosSucesso: number | null;
+};
+
+/**
+ * Entre as excursões passadas do z-score com |z| dentro de ±TOLERANCIA_Z do
+ * valor atual e mesmo sinal, qual fração voltou a |z| < Z_SAIDA dentro de
+ * `prazoMaxLinhas` linhas da série. Dias consecutivos dentro da faixa
+ * contam como UMA excursão (uma amostra), não uma por dia — do contrário um
+ * regime persistente de 40 dias inflaria n artificialmente.
+ *
+ * Uma excursão só vira amostra se o desfecho é conhecido: sucesso (achou
+ * |z|<Z_SAIDA dentro do prazo) ou fracasso CONFIRMADO (o prazo inteiro
+ * coube no histórico observado sem sucesso). Se o histórico acaba no meio
+ * da janela de observação sem sucesso, a excursão é censurada e descartada
+ * — é assim que a excursão ATUAL (ainda em curso) fica de fora da própria
+ * amostra que tenta prevê-la.
+ */
+export function taxaReversaoHistorica(
+  rows: ZScoreRow[],
+  zAtual: number,
+  prazoMaxLinhas: number
+): TaxaReversaoBruta {
+  const sinal = zAtual >= 0 ? 1 : -1;
+  const alvo = Math.abs(zAtual);
+  const bandaInf = Math.max(0, alvo - TOLERANCIA_Z);
+  const bandaSup = alvo + TOLERANCIA_Z;
+
+  const zs = rows.map((r) => r.z_score_63d);
+  const ultimoIdx = rows.length - 1;
+
+  let emBanda = false;
+  const sucessosDias: number[] = [];
+  let sucessos = 0;
+  let n = 0;
+
+  for (let i = 0; i <= ultimoIdx; i++) {
+    const z = zs[i];
+    if (z === null) {
+      emBanda = false;
+      continue;
+    }
+    const az = Math.abs(z);
+    const dentro = Math.sign(z) === sinal && az >= bandaInf && az <= bandaSup;
+
+    if (dentro && !emBanda) {
+      const fimJanela = Math.min(i + prazoMaxLinhas, ultimoIdx);
+      let sucesso = false;
+      let dias: number | null = null;
+      for (let j = i; j <= fimJanela; j++) {
+        const zj = zs[j];
+        if (zj !== null && Math.abs(zj) < Z_SAIDA) {
+          sucesso = true;
+          dias = j - i;
+          break;
+        }
+      }
+      // Só é amostra válida se: teve sucesso (desfecho conhecido, mesmo
+      // perto do fim da série) OU a janela inteira de prazoMaxLinhas coube
+      // no histórico (fracasso confirmado, não censurado).
+      const resolvido = sucesso || i + prazoMaxLinhas <= ultimoIdx;
+      if (resolvido) {
+        n++;
+        if (sucesso) {
+          sucessos++;
+          if (dias !== null) sucessosDias.push(dias);
+        }
+      }
+    }
+    emBanda = dentro;
+  }
+
+  return { sucessos, n, diasMedianosSucesso: medianaSimples(sucessosDias) };
+}
+
+// ---- Métricas por par ----------------------------------------------------
+
+export type MetricasBrutas = {
+  par: string;
+  tickerA: string;
+  tickerB: string;
+  setor: string;
+  zAtual: number | null;
+  ganho: number | null; // (|z|-Z_SAIDA) × σ_spread
+  perda: number | null; // (Z_STOP-|z|) × σ_spread — null se |z| >= Z_STOP
+  custo: number | null;
+  ganhoPorDia: number | null;
+  meiaVidaMediana: number | null;
+  taxa: TaxaReversaoBruta;
+  motivos: string[]; // filtros reprovados / motivos de dado insuficiente
+};
+
+function ultimoBetaValido(beta: BetaPoint[]): { idx: number; valor: number } | null {
+  for (let i = beta.length - 1; i >= 0; i--) {
+    if (beta[i].beta !== null) return { idx: i, valor: beta[i].beta as number };
+  }
+  return null;
+}
+
+export function computeMetricasBrutas(
+  par: string,
+  tickerA: string,
+  tickerB: string,
+  setor: string,
+  rows: ZScoreRow[]
+): MetricasBrutas {
+  const motivos: string[] = [];
+
+  if (rows.length === 0) {
+    return {
+      par,
+      tickerA,
+      tickerB,
+      setor,
+      zAtual: null,
+      ganho: null,
+      perda: null,
+      custo: null,
+      ganhoPorDia: null,
+      meiaVidaMediana: null,
+      taxa: { sucessos: 0, n: 0, diasMedianosSucesso: null },
+      motivos: ["Sem dados de preço"],
+    };
+  }
+
+  const ultimo = rows[rows.length - 1];
+  const zAtual = ultimo.z_score_63d;
+  const sigma = ultimo.desvio_spread_63d;
+  const longa = rollingHalfLife(rows, HALFLIFE_LONG_WINDOW);
+  const meiaVidaMediana = medianaValida(longa);
+
+  // Filtro: correlação móvel atual.
+  const correlacao = ultimo.correlacao_movel_63d;
+  if (correlacao === null || Math.abs(correlacao) <= CORR_MIN) {
+    motivos.push(
+      `Correlação baixa (${correlacao !== null ? correlacao.toFixed(2) : "N/D"})`
+    );
+  }
+
+  // Filtro: quebra estrutural (CUSUM) recente.
+  const cusum = computeCUSUM(rows);
+  if (cusum.ultimaQuebraData !== null) {
+    const dias = diasEntreDatas(cusum.ultimaQuebraData, ultimo.data);
+    if (dias <= DIAS_SEM_QUEBRA) {
+      motivos.push(`Quebra estrutural recente (${cusum.ultimaQuebraData})`);
+    }
+  }
+
+  // Filtro: variação do hedge ratio (beta móvel) na janela recente — compara
+  // o beta atual contra o beta de BETA_WINDOW linhas atrás (mesma janela já
+  // usada pro beta móvel no resto do app). Sem dado suficiente, o filtro
+  // não reprova (não penaliza par com histórico curto por falta de dado).
+  const beta = rollingBeta(rows, BETA_WINDOW);
+  const betaAtual = ultimoBetaValido(beta);
+  if (betaAtual) {
+    const idxAnterior = betaAtual.idx - BETA_WINDOW;
+    const betaAnterior = idxAnterior >= 0 ? beta[idxAnterior].beta : null;
+    if (betaAnterior !== null && betaAnterior !== 0) {
+      const variacao = Math.abs(betaAtual.valor - betaAnterior) / Math.abs(betaAnterior);
+      if (variacao > BETA_VAR_MAX) {
+        motivos.push(`Hedge ratio instável (${(variacao * 100).toFixed(0)}%)`);
+      }
+    }
+  }
+
+  if (zAtual === null || sigma === null || meiaVidaMediana === null) {
+    motivos.push("Histórico insuficiente");
+    return {
+      par,
+      tickerA,
+      tickerB,
+      setor,
+      zAtual,
+      ganho: null,
+      perda: null,
+      custo: null,
+      ganhoPorDia: null,
+      meiaVidaMediana,
+      taxa: { sucessos: 0, n: 0, diasMedianosSucesso: null },
+      motivos,
+    };
+  }
+
+  const az = Math.abs(zAtual);
+  const ganho = (az - Z_SAIDA) * sigma;
+  const ganhoPorDia = ganho / meiaVidaMediana;
+
+  let perda: number | null = null;
+  if (az >= Z_STOP) {
+    motivos.push(`Z além do stop (${zAtual.toFixed(2)})`);
+  } else {
+    perda = (Z_STOP - az) * sigma;
+  }
+
+  const custo =
+    4 * (COMISSAO_PCT + SLIPPAGE_PCT) + (ALUGUEL_ANUAL_PCT / 252) * meiaVidaMediana;
+
+  const prazoMaxLinhas = Math.round(PRAZO_MAX_MULT_MEIA_VIDA * meiaVidaMediana);
+  const taxa = taxaReversaoHistorica(rows, zAtual, prazoMaxLinhas);
+
+  return {
+    par,
+    tickerA,
+    tickerB,
+    setor,
+    zAtual,
+    ganho,
+    perda,
+    custo,
+    ganhoPorDia,
+    meiaVidaMediana,
+    taxa,
+    motivos,
+  };
+}
+
+// ---- Finalização: P_geral, score e ordenação -----------------------------
+
+export type RankingRow = {
+  par: string;
+  tickerA: string;
+  tickerB: string;
+  setor: string;
+  zAtual: number | null;
+  ganhoPorDia: number | null;
+  taxaReversao: {
+    pAjustada: number;
+    n: number;
+    sucessos: number;
+    diasMedianosSucesso: number | null;
+    amostraInsuficiente: boolean;
+  };
+  custoEstimado: number | null;
+  score: number | null;
+  motivos: string[];
+  cinza: boolean;
+  tickerACount: number;
+  tickerBCount: number;
+  melhorParTickerA: boolean;
+  melhorParTickerB: boolean;
+};
+
+export function finalizarRanking(brutas: MetricasBrutas[]): RankingRow[] {
+  let totalSucessos = 0;
+  let totalN = 0;
+  for (const b of brutas) {
+    totalSucessos += b.taxa.sucessos;
+    totalN += b.taxa.n;
+  }
+  // Taxa média de todos os pares (pooled: soma de sucessos ÷ soma de
+  // episódios, não a média simples das taxas por par) — usada como o "P
+  // geral" que o encolhimento por amostra pequena puxa cada par em direção.
+  // 0.5 é só um piso neutro pro caso degenerado de nenhum par ter episódio
+  // nenhum (não deveria acontecer com dado real).
+  const pGeral = totalN > 0 ? totalSucessos / totalN : 0.5;
+
+  const linhas: RankingRow[] = brutas.map((b) => {
+    const pAjustada = (b.taxa.sucessos + K_SHRINK * pGeral) / (b.taxa.n + K_SHRINK);
+    const amostraInsuficiente = b.taxa.n < N_MIN;
+
+    let score: number | null = null;
+    if (b.ganho !== null && b.perda !== null && b.custo !== null && b.meiaVidaMediana !== null) {
+      const retornoLiquido = pAjustada * b.ganho - (1 - pAjustada) * b.perda - b.custo;
+      score = retornoLiquido / b.meiaVidaMediana;
+    }
+
+    const cinza =
+      b.motivos.length > 0 || amostraInsuficiente || score === null || score < 0;
+
+    return {
+      par: b.par,
+      tickerA: b.tickerA,
+      tickerB: b.tickerB,
+      setor: b.setor,
+      zAtual: b.zAtual,
+      ganhoPorDia: b.ganhoPorDia,
+      taxaReversao: {
+        pAjustada,
+        n: b.taxa.n,
+        sucessos: b.taxa.sucessos,
+        diasMedianosSucesso: b.taxa.diasMedianosSucesso,
+        amostraInsuficiente,
+      },
+      custoEstimado: b.custo,
+      score,
+      motivos: b.motivos,
+      cinza,
+      tickerACount: 0,
+      tickerBCount: 0,
+      melhorParTickerA: false,
+      melhorParTickerB: false,
+    };
+  });
+
+  // Ativos repetidos: conta ocorrências de cada ticker no ranking e acha o
+  // par de maior score pra cada um (pra destacar qual das N repetições vale
+  // mais olhar primeiro).
+  const contagem = new Map<string, number>();
+  const melhorPorTicker = new Map<string, { par: string; score: number }>();
+  for (const l of linhas) {
+    for (const t of [l.tickerA, l.tickerB]) {
+      contagem.set(t, (contagem.get(t) ?? 0) + 1);
+      if (l.score !== null) {
+        const atual = melhorPorTicker.get(t);
+        if (!atual || l.score > atual.score) melhorPorTicker.set(t, { par: l.par, score: l.score });
+      }
+    }
+  }
+
+  for (const l of linhas) {
+    l.tickerACount = contagem.get(l.tickerA) ?? 1;
+    l.tickerBCount = contagem.get(l.tickerB) ?? 1;
+    l.melhorParTickerA = melhorPorTicker.get(l.tickerA)?.par === l.par;
+    l.melhorParTickerB = melhorPorTicker.get(l.tickerB)?.par === l.par;
+  }
+
+  linhas.sort((a, b) => (b.score ?? -Infinity) - (a.score ?? -Infinity));
+  return linhas;
+}

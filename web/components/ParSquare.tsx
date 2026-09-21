@@ -1,12 +1,21 @@
 import Link from "next/link";
 import { statusColor, statusLabel, colors, hexToRgba } from "@/lib/theme";
+import { formatPct } from "@/lib/format";
 import type { ParStatusRow } from "@/lib/pares-repo";
 
-export function ParSquare({ row }: { row: ParStatusRow }) {
+export function ParSquare({ row, score }: { row: ParStatusRow; score?: number | null }) {
   const cor = row.estado ? statusColor(row.estado) : colors.inkMuted;
-  const titulo = [row.setor, row.correlacao !== null ? `correlação ${row.correlacao.toFixed(2)}` : null]
+  const titulo = [
+    row.setor,
+    row.correlacao !== null ? `correlação ${row.correlacao.toFixed(2)}` : null,
+    row.zScore !== null ? `z ${row.zScore.toFixed(2)}` : null,
+  ]
     .filter(Boolean)
     .join(" · ");
+
+  // Score de oportunidade (lib/ranking.ts) é o valor principal exibido —
+  // z-score continua disponível no tooltip e no gráfico/painel do par.
+  const temScore = score !== undefined && score !== null;
 
   return (
     <Link
@@ -22,7 +31,7 @@ export function ParSquare({ row }: { row: ParStatusRow }) {
         {row.par}
       </span>
       <span className="text-base font-bold tabular-nums" style={{ color: cor }}>
-        {row.zScore !== null ? row.zScore.toFixed(2) : "—"}
+        {temScore ? formatPct(score as number, 2) : "—"}
       </span>
       {row.estado && (
         <span className="text-[9px] font-medium leading-none" style={{ color: cor }}>

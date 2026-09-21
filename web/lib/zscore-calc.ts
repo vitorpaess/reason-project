@@ -124,5 +124,11 @@ export function computeZScoreSeries(precosA: PricePoint[], precosB: PricePoint[]
     spread: spread[i],
     retorno_a: retornoA[i],
     retorno_b: retornoB[i],
+    // Mesmo desvio-padrão usado no denominador do z-score, exposto aqui pra
+    // lib/ranking.ts converter |z| em % esperado de movimento do spread sem
+    // recalcular a janela móvel — spread já está em fração do valor por
+    // ponta (preço normalizado a 1 no início da série), então esse desvio
+    // já sai diretamente em "% do valor da operação".
+    desvio_spread_63d: desvioMovel[i],
   }));
 }
