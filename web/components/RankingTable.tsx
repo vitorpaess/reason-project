@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { colors } from "@/lib/theme";
 import { formatPct } from "@/lib/format";
+import { StatusPill } from "@/components/StatusPill";
 import type { RankingRow } from "@/lib/ranking";
 
 const COLUNAS: { header: string; className: string; tooltip: string }[] = [
@@ -29,7 +30,19 @@ const COLUNAS: { header: string; className: string; tooltip: string }[] = [
     tooltip:
       "[P_ajustada × Ganho − (1 − P_ajustada) × Perda − Custo] ÷ dias esperados (meia-vida mediana) — pode ser negativo. Perda = média de (|z| saída − |z| entrada) das falhas deste par em σ_spread atual (se ≥3 falhas; senão z_stop − |z| atual), também pode ser negativa",
   },
+  {
+    header: "ADF",
+    className: "text-center",
+    tooltip:
+      "Teste de raiz unitária (ADF) sobre os últimos 200 dias do spread — não é usado como filtro, só indicativo de estacionariedade recente. Verde: p<0,05. Amarelo: p<0,10. Cinza: p≥0,10 ou dado insuficiente",
+  },
 ];
+
+function adfCor(pFaixa: RankingRow["adfPFaixa"]): string {
+  if (pFaixa === "< 0.01" || pFaixa === "< 0.05") return colors.statusGood;
+  if (pFaixa === "< 0.10") return colors.statusWarning;
+  return colors.inkMuted;
+}
 
 function TickerComBadge({
   ticker,
@@ -120,6 +133,9 @@ export function RankingTable({ rows }: { rows: RankingRow[] }) {
                 }}
               >
                 {formatPct(r.score, 3)}
+              </td>
+              <td className="px-2 py-2 text-center">
+                <StatusPill label={r.adfPFaixa ?? "N/D"} color={adfCor(r.adfPFaixa)} />
               </td>
             </tr>
           ))}

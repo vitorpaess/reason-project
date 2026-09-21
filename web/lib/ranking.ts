@@ -8,12 +8,14 @@
 import type { ZScoreRow } from "./pairs-data";
 import {
   BETA_WINDOW,
+  adfTest,
   computeCUSUM,
   diasEntreDatas,
   medianaValida,
   rollingBeta,
   rollingHalfLife,
   HALFLIFE_LONG_WINDOW,
+  type AdfResultado,
   type BetaPoint,
 } from "./mean-reversion";
 import { EXIT_THRESHOLD } from "./config";
@@ -60,6 +62,13 @@ export const BETA_VAR_MAX = 0.2; // 20%
 // Sem fonte de volume nos dados hoje (a planilha "Preços DATA" só tem
 // fechamento) — o filtro de liquidez mínima do enunciado não é aplicado.
 // Ver explicação no fim da implementação.
+
+// Selo (não-filtro) de estacionariedade: ADF sobre os últimos ADF_JANELA
+// dias do spread — deliberadamente diferente do ADF de histórico inteiro
+// mostrado na página do par (lib/mean-reversion.ts), que reage devagar
+// demais pra ser útil como leitura de regime recente. Só informativo: não
+// entra em `motivos`/`cinza` nem afeta o score.
+export const ADF_JANELA = 200;
 // ------------------------------------------------------------------------
 
 function medianaSimples(valores: number[]): number | null {
@@ -213,6 +222,10 @@ export type MetricasBrutas = {
   meiaVidaMediana: number | null;
   taxa: TaxaReversaoBruta;
   motivos: string[]; // filtros reprovados / motivos de dado insuficiente
+  // Selo informativo, não-filtro — ver ADF_JANELA acima. null = histórico
+  // curto demais pros últimos ADF_JANELA dias (não deveria acontecer com
+  // dado real, mas cai como "sem dado" na tela).
+  adfPFaixa: AdfResultado["pFaixa"] | null;
 };
 
 function ultimoBetaValido(beta: BetaPoint[]): { idx: number; valor: number } | null {
@@ -245,6 +258,7 @@ export function computeMetricasBrutas(
       meiaVidaMediana: null,
       taxa: { sucessos: 0, n: 0, diasMedianosSucesso: null, perdaMediaZ: null, numFalhas: 0 },
       motivos: ["Sem dados de preço"],
+      adfPFaixa: null,
     };
   }
 
@@ -253,6 +267,7 @@ export function computeMetricasBrutas(
   const sigma = ultimo.desvio_spread_63d;
   const longa = rollingHalfLife(rows, HALFLIFE_LONG_WINDOW);
   const meiaVidaMediana = medianaValida(longa);
+  const adfPFaixa = adfTest(rows.slice(-ADF_JANELA))?.pFaixa ?? null;
 
   // Filtro: correlação móvel atual.
   const correlacao = ultimo.correlacao_movel_63d;
@@ -303,6 +318,7 @@ export function computeMetricasBrutas(
       meiaVidaMediana,
       taxa: { sucessos: 0, n: 0, diasMedianosSucesso: null, perdaMediaZ: null, numFalhas: 0 },
       motivos,
+      adfPFaixa,
     };
   }
 
@@ -341,6 +357,7 @@ export function computeMetricasBrutas(
     meiaVidaMediana,
     taxa,
     motivos,
+    adfPFaixa,
   };
 }
 
@@ -364,6 +381,9 @@ export type RankingRow = {
   score: number | null;
   motivos: string[];
   cinza: boolean;
+  // Selo informativo (ADF sobre os últimos ADF_JANELA dias do spread) —
+  // não entra em `cinza`/`motivos` nem afeta `score` ou a ordenação.
+  adfPFaixa: AdfResultado["pFaixa"] | null;
   tickerACount: number;
   tickerBCount: number;
   melhorParTickerA: boolean;
@@ -415,6 +435,7 @@ export function finalizarRanking(brutas: MetricasBrutas[]): RankingRow[] {
       score,
       motivos: b.motivos,
       cinza,
+      adfPFaixa: b.adfPFaixa,
       tickerACount: 0,
       tickerBCount: 0,
       melhorParTickerA: false,
