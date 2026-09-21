@@ -1,7 +1,8 @@
 import { colors } from "@/lib/theme";
+import { EXIT_THRESHOLD } from "@/lib/config";
 import { StatusPill } from "@/components/StatusPill";
 import { HalfLifeChart } from "@/components/HalfLifeChart";
-import type { SignalEvent, ZScoreRow } from "@/lib/pairs-data";
+import type { ZScoreRow } from "@/lib/pairs-data";
 import {
   CORRELACAO_MINIMA_SAUDAVEL,
   HALFLIFE_ALERT_RATIO,
@@ -10,6 +11,7 @@ import {
   POSICAO_RATIO_AMARELO,
   POSICAO_RATIO_VERMELHO,
   computeCUSUM,
+  diasForaDoEquilibrio,
   medianaValida,
   rollingHalfLife,
   type HalfLifePoint,
@@ -29,14 +31,12 @@ function ultimoValido(pontos: HalfLifePoint[]): HalfLifePoint | null {
 
 export function MeanReversionSection({
   rows,
-  oportunidades,
 }: {
   /** Histórico completo (não filtrado pelo seletor de período) — esses
    * indicadores são leituras de "regime atual" e ficam mais confiáveis
    * com o máximo de histórico disponível, não com uma janela curta que o
    * usuário pode ter selecionado só pra olhar o gráfico de z-score. */
   rows: ZScoreRow[];
-  oportunidades: SignalEvent[];
 }) {
   const curta = rollingHalfLife(rows, HALFLIFE_SHORT_WINDOW);
   const longa = rollingHalfLife(rows, HALFLIFE_LONG_WINDOW);
@@ -61,16 +61,14 @@ export function MeanReversionSection({
   const correlacaoLabel =
     ultimaCorrelacao !== null ? `Correlação ${ultimaCorrelacao.toFixed(2)}` : "Correlação N/D";
 
-  // Reaproveita o histórico de oportunidades (state machine já existente
-  // sobre o z-score) — se a oportunidade mais recente ainda está aberta,
-  // diasEmAberto já É "há quantos dias |z| > limiar desde a última entrada".
-  const posicaoAtual = oportunidades[0];
-  const diasEmExcursao =
-    posicaoAtual && posicaoAtual.dataSaida === null ? posicaoAtual.diasEmAberto : null;
+  // Contagem direta sobre o z-score (não via o histórico de oportunidades,
+  // que fecha no limiar de ENTRADA e esconderia excursões longas com um
+  // mergulho breve no meio — ver lib/mean-reversion.ts).
+  const diasForaEquilibrio = diasForaDoEquilibrio(rows, EXIT_THRESHOLD);
   const medianaLonga = medianaValida(longa);
   const razaoPosicao =
-    diasEmExcursao !== null && medianaLonga !== null && medianaLonga > 0
-      ? diasEmExcursao / medianaLonga
+    diasForaEquilibrio !== null && medianaLonga !== null && medianaLonga > 0
+      ? diasForaEquilibrio / medianaLonga
       : null;
   const corRazao =
     razaoPosicao === null
@@ -89,7 +87,7 @@ export function MeanReversionSection({
           <StatusPill label={correlacaoLabel} color={correlacaoOk ? colors.statusGood : colors.inkMuted} />
           {cusum.quebraData && (
             <StatusPill
-              label={`Quebra detectada · ${formatDate(cusum.quebraData)}`}
+              label={`Quebra recente · ${formatDate(cusum.quebraData)}`}
               color={colors.statusCritical}
             />
           )}
@@ -98,10 +96,16 @@ export function MeanReversionSection({
       </div>
 
       <HalfLifeChart curta={curta} longa={longa} />
+      <p className="mt-2 text-[11px] leading-relaxed text-ink-muted">
+        A meia-vida mede reversão em torno da média local de cada janela, não da média histórica
+        do z-score — um patamar novo que já domina boa parte da janela pode parecer &ldquo;revertendo
+        rápido&rdquo; mesmo com o z-score longe de zero. Use o selo de quebra (CUSUM) e o indicador
+        abaixo como leituras complementares, não como confirmação da meia-vida.
+      </p>
 
       <div className="mt-4 rounded-lg bg-surface-raised px-3.5 py-2.5">
         <div className="text-[10px] font-medium uppercase tracking-wide text-ink-muted">
-          Tempo em posição ÷ meia-vida histórica
+          Tempo fora do equilíbrio ÷ meia-vida histórica
         </div>
         {razaoPosicao !== null ? (
           <div className="mt-1 flex items-baseline gap-2">
@@ -109,13 +113,14 @@ export function MeanReversionSection({
               {razaoPosicao.toFixed(2)}×
             </span>
             <span className="text-xs text-ink-secondary">
-              {diasEmExcursao}d em posição ÷ mediana de {medianaLonga!.toFixed(0)}d (janela longa)
+              {diasForaEquilibrio}d com |z| ≥ {EXIT_THRESHOLD.toFixed(2)} ÷ mediana de{" "}
+              {medianaLonga!.toFixed(0)}d (janela longa)
             </span>
           </div>
         ) : (
           <div className="mt-1 text-xs text-ink-muted">
-            {diasEmExcursao === null
-              ? "Sem oportunidade em aberto no momento."
+            {diasForaEquilibrio === null
+              ? "Sem z-score calculado ainda."
               : "Histórico insuficiente pra estimar a mediana da meia-vida."}
           </div>
         )}

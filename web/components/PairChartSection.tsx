@@ -97,7 +97,7 @@ export function PairChartSection({
         <SignalHistoryTable oportunidades={filteredOportunidades} />
       </div>
 
-      <MeanReversionSection rows={rows} oportunidades={oportunidades} />
+      <MeanReversionSection rows={rows} />
     </div>
   );
 }

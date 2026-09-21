@@ -12,25 +12,40 @@ export const HALFLIFE_SHORT_WINDOW = 50;
 export const HALFLIFE_LONG_WINDOW = 200;
 // Alerta quando a meia-vida curta for maior que este múltiplo da longa.
 export const HALFLIFE_ALERT_RATIO = 2;
-// Card "tempo em posição ÷ meia-vida": limiares de cor (múltiplos da
-// mediana histórica da meia-vida longa).
+// Card "tempo fora do equilíbrio ÷ meia-vida": limiares de cor (múltiplos
+// da mediana histórica da meia-vida longa).
 export const POSICAO_RATIO_AMARELO = 1;
 export const POSICAO_RATIO_VERMELHO = 2;
-// CUSUM: limite de detecção de quebra = CUSUM_THRESHOLD * sqrt(n),
-// convenção comum de carta de controle CUSUM (Page/Brown-Durbin-Evans usam
-// limites na mesma ordem de grandeza para uma soma cumulativa padronizada).
+// CUSUM: limite de detecção de quebra = CUSUM_THRESHOLD * sqrt(n) do
+// segmento em análise (convenção comum de carta de controle CUSUM —
+// Page/Brown-Durbin-Evans usam limites na mesma ordem de grandeza pra uma
+// soma cumulativa padronizada). Só mostra o selo se a quebra mais recente
+// aconteceu dentro dos últimos CUSUM_RECENTE_DIAS dias corridos.
 export const CUSUM_THRESHOLD = 4;
+export const CUSUM_RECENTE_DIAS = 30;
 // Correlação mínima pro selo verde (mesmo limiar já usado no resto do app).
 export const CORRELACAO_MINIMA_SAUDAVEL = 0.5;
 // ------------------------------------------------------------------------
+
+function diasEntreDatas(a: string, b: string): number {
+  const msPorDia = 1000 * 60 * 60 * 24;
+  return Math.round((new Date(b + "T00:00:00").getTime() - new Date(a + "T00:00:00").getTime()) / msPorDia);
+}
 
 export type HalfLifePoint = {
   data: string;
   /** null se não há amostra suficiente na janela, OU se semReversao=true
    * (a meia-vida só existe matematicamente quando b < 0). */
   meiaVida: number | null;
-  /** b >= 0 nessa janela — o spread não está revertendo à média, só
-   * tendendo (ou é um passeio aleatório). */
+  /** b >= 0 nessa janela — o spread não está revertendo à média local da
+   * janela, só tendendo (ou é um passeio aleatório). Importante: isso mede
+   * reversão em torno da média DA JANELA, não da média histórica de longo
+   * prazo — se o patamar do spread mudou e ficou ali por boa parte da
+   * janela, a regressão pode achar reversão rápida em torno do NOVO
+   * patamar mesmo com o z-score (calculado contra a média histórica) bem
+   * longe de zero. Por isso o card de quebra estrutural (CUSUM) e o
+   * indicador de tempo fora do equilíbrio existem como sinais
+   * complementares, não redundantes. */
   semReversao: boolean;
 };
 
@@ -97,44 +112,104 @@ export function medianaValida(pontos: HalfLifePoint[]): number | null {
     : ordenados[meio];
 }
 
+/**
+ * Dias corridos (na série) desde a última vez que |z| esteve dentro da
+ * zona de equilíbrio (< limiarSaida) — contado direto sobre o z-score, não
+ * via o histórico de oportunidades (que usa o limiar de ENTRADA, mais
+ * estrito, pra abrir/fechar; um mergulho rápido abaixo do limiar de
+ * entrada mas ainda fora da zona de equilíbrio reabriria uma "nova"
+ * oportunidade e esconderia quanto tempo o spread já está deslocado no
+ * total). null se |z| nunca esteve dentro da zona em todo o histórico
+ * disponível, ou se não há z calculado.
+ */
+export function diasForaDoEquilibrio(rows: ZScoreRow[], limiarSaida: number): number | null {
+  let dias = 0;
+  let achouZ = false;
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const z = rows[i].z_score_63d;
+    if (z === null) continue;
+    achouZ = true;
+    if (Math.abs(z) < limiarSaida) return dias;
+    dias++;
+  }
+  return achouZ ? dias : null;
+}
+
 export type CusumResultado = {
   series: { data: string; valor: number | null }[];
-  /** Data do primeiro ponto em que |CUSUM| passou do limite — null se não
-   * houve quebra detectada em todo o período. */
+  /** Data da quebra mais recente, só quando ela está dentro de
+   * CUSUM_RECENTE_DIAS do dado mais atual — null caso contrário (nenhuma
+   * quebra, ou só quebras antigas já "absorvidas"). */
   quebraData: string | null;
 };
 
+function media(valores: number[]): number {
+  return valores.reduce((a, b) => a + b, 0) / valores.length;
+}
+
+function desvioPadrao(valores: number[], m: number): number {
+  return Math.sqrt(valores.reduce((acc, v) => acc + (v - m) ** 2, 0) / (valores.length - 1));
+}
+
 /**
- * CUSUM sobre a série de spread (tratada como os resíduos da relação entre
- * os dois ativos — é exatamente o que o spread já representa: o desvio da
- * co-movimentação normalizada dos dois preços). Padroniza o spread (média/
- * desvio do período inteiro disponível), acumula, e sinaliza o primeiro
- * ponto em que a soma cumulativa passa do limite — indício de que a média
- * do spread mudou de patamar (quebra estrutural na relação do par).
+ * CUSUM sequencial sobre a série de spread (tratada como os resíduos da
+ * relação entre os dois ativos — é exatamente o que o spread já
+ * representa: o desvio da co-movimentação normalizada dos dois preços).
+ *
+ * Diferente de um CUSUM de passagem única: sempre que a soma cumulativa
+ * passa do limite, a média/desvio de referência são RECALCULADOS a partir
+ * dali (o segmento pós-quebra vira a nova base) e a varredura continua —
+ * assim uma quebra antiga que já foi absorvida (o spread se estabilizou
+ * num novo patamar e voltou a reverter normalmente) não deixa o selo
+ * aceso pra sempre, e uma quebra mais recente dentro do mesmo histórico
+ * ainda é detectável.
  */
 export function computeCUSUM(rows: ZScoreRow[]): CusumResultado {
-  const validos = rows.map((r) => r.spread).filter((v): v is number => v !== null);
+  const valores: (number | null)[] = rows.map((r) => r.spread);
+  const seriesCompleta: (number | null)[] = new Array(rows.length).fill(null);
 
-  if (validos.length < 2) {
-    return { series: rows.map((r) => ({ data: r.data, valor: null })), quebraData: null };
+  let inicioSegmento = 0;
+  let ultimaQuebraIdx: number | null = null;
+
+  // Máximo de segmentos processados — proteção contra loop, nunca deveria
+  // chegar perto disso na prática (cada quebra avança o início em >=1).
+  for (let iteracao = 0; iteracao < rows.length; iteracao++) {
+    const segmentoValores = valores
+      .slice(inicioSegmento)
+      .filter((v): v is number => v !== null);
+    if (segmentoValores.length < 2) break;
+
+    const m = media(segmentoValores);
+    const d = desvioPadrao(segmentoValores, m);
+    const limite = CUSUM_THRESHOLD * Math.sqrt(segmentoValores.length);
+
+    let acumulado = 0;
+    let quebraIdxNoSegmento: number | null = null;
+    for (let i = inicioSegmento; i < rows.length; i++) {
+      const v = valores[i];
+      if (v === null || d === 0) continue;
+      acumulado += (v - m) / d;
+      seriesCompleta[i] = acumulado;
+      if (quebraIdxNoSegmento === null && Math.abs(acumulado) > limite) {
+        quebraIdxNoSegmento = i;
+      }
+    }
+
+    if (quebraIdxNoSegmento === null) break;
+    ultimaQuebraIdx = quebraIdxNoSegmento;
+    inicioSegmento = quebraIdxNoSegmento + 1;
+    if (inicioSegmento >= rows.length) break;
   }
 
-  const media = validos.reduce((a, b) => a + b, 0) / validos.length;
-  const desvio = Math.sqrt(
-    validos.reduce((acc, v) => acc + (v - media) ** 2, 0) / (validos.length - 1)
-  );
-  const limite = CUSUM_THRESHOLD * Math.sqrt(validos.length);
+  const series = rows.map((r, i) => ({ data: r.data, valor: seriesCompleta[i] }));
 
-  let acumulado = 0;
-  let quebraData: string | null = null;
-  const series = rows.map((r) => {
-    if (r.spread === null || desvio === 0) return { data: r.data, valor: null };
-    acumulado += (r.spread - media) / desvio;
-    if (quebraData === null && Math.abs(acumulado) > limite) {
-      quebraData = r.data;
-    }
-    return { data: r.data, valor: acumulado };
-  });
+  if (ultimaQuebraIdx === null || rows.length === 0) {
+    return { series, quebraData: null };
+  }
 
-  return { series, quebraData };
+  const quebraData = rows[ultimaQuebraIdx].data;
+  const dataMaisRecente = rows[rows.length - 1].data;
+  const recente = diasEntreDatas(quebraData, dataMaisRecente) <= CUSUM_RECENTE_DIAS;
+
+  return { series, quebraData: recente ? quebraData : null };
 }
