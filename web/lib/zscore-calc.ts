@@ -11,6 +11,30 @@ import type { ZScoreRow } from "./pairs-data";
 
 const MIN_PERIODS = 2;
 
+// ---- Modo do spread (parâmetro configurável) ---------------------------
+// "normalizado" (original): (precoA/precoA0) - (precoB/precoB0), ancorado
+// no preço do PRIMEIRO dia de todo o histórico disponível (hoje, ~5 anos
+// atrás) — faz o desvio-padrão do spread inflar quando um dos dois ativos
+// teve uma reavaliação estrutural grande desde então, mesmo que os
+// RETORNOS diários continuem bem correlacionados (ver diagnóstico de
+// AAOI/VIAV, sigma=252%).
+// "log": ln(precoA) - ln(precoB), 1:1, sem hedge ratio — não ancorado em
+// nenhum preço específico, então não carrega esse viés histórico.
+// Ainda "normalizado" por padrão: o ranking e as páginas de par continuam
+// no comportamento já validado até a comparação entre os dois ser decidida.
+export type SpreadMode = "log" | "normalizado";
+export const SPREAD_MODE: SpreadMode = "normalizado";
+
+function computeSpread(precoA: number[], precoB: number[], modo: SpreadMode): number[] {
+  if (modo === "log") {
+    return precoA.map((v, i) => Math.log(v) - Math.log(precoB[i]));
+  }
+  const precoAInicial = precoA[0];
+  const precoBInicial = precoB[0];
+  return precoA.map((v, i) => v / precoAInicial - precoB[i] / precoBInicial);
+}
+// --------------------------------------------------------------------------
+
 function pctChange(values: number[]): (number | null)[] {
   const out: (number | null)[] = [null];
   for (let i = 1; i < values.length; i++) {
@@ -86,7 +110,11 @@ function rollingCorr(
   return out;
 }
 
-export function computeZScoreSeries(precosA: PricePoint[], precosB: PricePoint[]): ZScoreRow[] {
+export function computeZScoreSeries(
+  precosA: PricePoint[],
+  precosB: PricePoint[],
+  modo: SpreadMode = SPREAD_MODE
+): ZScoreRow[] {
   const mapaB = new Map(precosB.map((p) => [p.data, p.preco]));
   const datasComuns = precosA
     .map((p) => p.data)
@@ -104,9 +132,7 @@ export function computeZScoreSeries(precosA: PricePoint[], precosB: PricePoint[]
   const retornoB = pctChange(precoB);
   const correlacao = rollingCorr(retornoA, retornoB, window, MIN_PERIODS);
 
-  const precoAInicial = precoA[0];
-  const precoBInicial = precoB[0];
-  const spread = precoA.map((v, i) => v / precoAInicial - precoB[i] / precoBInicial);
+  const spread = computeSpread(precoA, precoB, modo);
 
   const mediaMovel = rollingStat(spread, window, MIN_PERIODS, media);
   const desvioMovel = rollingStat(spread, window, MIN_PERIODS, desvioPadrao);
@@ -126,9 +152,11 @@ export function computeZScoreSeries(precosA: PricePoint[], precosB: PricePoint[]
     retorno_b: retornoB[i],
     // Mesmo desvio-padrão usado no denominador do z-score, exposto aqui pra
     // lib/ranking.ts converter |z| em % esperado de movimento do spread sem
-    // recalcular a janela móvel — spread já está em fração do valor por
-    // ponta (preço normalizado a 1 no início da série), então esse desvio
-    // já sai diretamente em "% do valor da operação".
+    // recalcular a janela móvel — nos dois modos, spread já está em fração
+    // do valor por ponta (em "normalizado" porque o preço é normalizado a 1
+    // no início da série; em "log" porque ln(A)-ln(B) aproxima direto a
+    // variação percentual pra oscilações do tamanho que o spread costuma
+    // ter), então esse desvio já sai em "% do valor da operação" nos dois.
     desvio_spread_63d: desvioMovel[i],
   }));
 }
