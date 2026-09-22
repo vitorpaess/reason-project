@@ -320,11 +320,20 @@ const ADF_CRITICO_1PCT = -3.43;
 const ADF_CRITICO_5PCT = -2.86;
 const ADF_CRITICO_10PCT = -2.57;
 
+export type PFaixa = "< 0.01" | "< 0.05" | "< 0.10" | "≥ 0.10";
+
 export type AdfResultado = {
   tau: number;
-  pFaixa: "< 0.01" | "< 0.05" | "< 0.10" | "≥ 0.10";
+  pFaixa: PFaixa;
   estacionario: boolean; // pFaixa < 0.05 — limiar padrão de significância
 };
+
+function bucketizarTau(tau: number, c1: number, c5: number, c10: number): PFaixa {
+  if (tau < c1) return "< 0.01";
+  if (tau < c5) return "< 0.05";
+  if (tau < c10) return "< 0.10";
+  return "≥ 0.10";
+}
 
 function multiplicarXtX(X: number[][]): number[][] {
   const k = X[0].length;
@@ -417,19 +426,17 @@ function ols(X: number[][], y: number[]): { coef: number[]; se: number[] } | nul
 }
 
 /**
- * Augmented Dickey-Fuller sobre o spread inteiro disponível (não é um
- * indicador móvel como a meia-vida — usa o máximo de histórico, igual a
- * um filtro de qualidade estático do par, e por isso reage devagar a
- * mudanças recentes, mesma limitação da meia-vida longa).
- *
- * Regressão: Δy(t) = alpha + gamma*y(t-1) + Σ delta_i*Δy(t-i) + ε(t),
- * testando H0: gamma=0 (raiz unitária, não estacionário) vs H1: gamma<0
- * (estacionário/reverte à média). tau = gamma_hat / erro-padrão(gamma_hat).
+ * Núcleo do teste ADF (Dickey-Fuller aumentado), reusado tanto pelo ADF
+ * "puro" sobre o spread quanto pelo segundo estágio do Engle-Granger sobre
+ * resíduos de cointegração — ambos são "roda ADF numa série y". Regressão:
+ * Δy(t) = alpha + gamma*y(t-1) + Σ delta_i*Δy(t-i) + ε(t), testando
+ * H0: gamma=0 (raiz unitária) vs H1: gamma<0 (estacionário). Retorna
+ * tau = gamma_hat / erro-padrão(gamma_hat); null se a amostra for curta
+ * demais pra um teste confiável.
  */
-export function adfTest(rows: ZScoreRow[], lags: number = ADF_LAGS): AdfResultado | null {
-  const y = rows.map((r) => r.spread).filter((v): v is number => v !== null);
+function adfTauDaSerie(y: number[], lags: number): number | null {
   const n = y.length;
-  if (n < lags + 10) return null; // amostra curta demais pra um teste confiável
+  if (n < lags + 10) return null;
 
   const delta: number[] = [];
   for (let i = 1; i < n; i++) delta.push(y[i] - y[i - 1]);
@@ -447,16 +454,74 @@ export function adfTest(rows: ZScoreRow[], lags: number = ADF_LAGS): AdfResultad
 
   const resultado = ols(X, alvo);
   if (resultado === null) return null;
+  return resultado.coef[1] / resultado.se[1];
+}
 
-  const tau = resultado.coef[1] / resultado.se[1];
-  const pFaixa: AdfResultado["pFaixa"] =
-    tau < ADF_CRITICO_1PCT
-      ? "< 0.01"
-      : tau < ADF_CRITICO_5PCT
-        ? "< 0.05"
-        : tau < ADF_CRITICO_10PCT
-          ? "< 0.10"
-          : "≥ 0.10";
+/**
+ * Augmented Dickey-Fuller sobre o spread inteiro disponível (não é um
+ * indicador móvel como a meia-vida — usa o máximo de histórico, igual a
+ * um filtro de qualidade estático do par, e por isso reage devagar a
+ * mudanças recentes, mesma limitação da meia-vida longa).
+ */
+export function adfTest(rows: ZScoreRow[], lags: number = ADF_LAGS): AdfResultado | null {
+  const y = rows.map((r) => r.spread).filter((v): v is number => v !== null);
+  const tau = adfTauDaSerie(y, lags);
+  if (tau === null) return null;
+  return {
+    tau,
+    pFaixa: bucketizarTau(tau, ADF_CRITICO_1PCT, ADF_CRITICO_5PCT, ADF_CRITICO_10PCT),
+    estacionario: tau < ADF_CRITICO_5PCT,
+  };
+}
 
-  return { tau, pFaixa, estacionario: tau < ADF_CRITICO_5PCT };
+// ---- Teste de cointegração de Engle-Granger ----------------------------
+// Valores críticos assintóticos padrão (MacKinnon) pro teste de Engle-
+// Granger com 2 variáveis (constante + 1 regressor, sem tendência) — mais
+// exigentes que os do ADF simples porque a série testada (o resíduo) vem
+// de uma regressão JÁ ESTIMADA, não de dado bruto. Mesma lógica do ADF
+// acima: reportamos a faixa, não um p-valor contínuo inventado.
+const EG_CRITICO_1PCT = -3.9;
+const EG_CRITICO_5PCT = -3.34;
+const EG_CRITICO_10PCT = -3.04;
+
+export type EngleGrangerResultado = {
+  tau: number;
+  pFaixa: PFaixa;
+  cointegrado: boolean; // pFaixa < 0.05
+};
+
+/**
+ * Engle-Granger em duas etapas: (1) regride ln(precoA) em ln(precoB) + uma
+ * constante — SEM impor hedge ratio 1:1 como o spread já usado no resto do
+ * app, deixa a regressão achar o coeficiente que melhor cointegra os dois
+ * níveis; (2) roda ADF sobre os resíduos dessa regressão. H0: os resíduos
+ * têm raiz unitária (os dois preços NÃO são cointegrados) vs H1: resíduos
+ * estacionários (cointegrados — o desvio entre os níveis reverte à média).
+ */
+export function engleGrangerTest(
+  rows: ZScoreRow[],
+  lags: number = ADF_LAGS
+): EngleGrangerResultado | null {
+  const pares = rows
+    .filter((r) => r.preco_a !== null && r.preco_b !== null)
+    .map((r) => [Math.log(r.preco_a as number), Math.log(r.preco_b as number)] as const);
+
+  // Regressão + ADF nos resíduos precisam de folga um pouco maior que o ADF
+  // puro (perde 1 grau de liberdade extra pro coeficiente estimado).
+  if (pares.length < lags + 15) return null;
+
+  const X = pares.map(([, lnB]) => [1, lnB]);
+  const y = pares.map(([lnA]) => lnA);
+  const regressao = ols(X, y);
+  if (regressao === null) return null;
+
+  const residuos = pares.map(([lnA, lnB]) => lnA - (regressao.coef[0] + regressao.coef[1] * lnB));
+  const tau = adfTauDaSerie(residuos, lags);
+  if (tau === null) return null;
+
+  return {
+    tau,
+    pFaixa: bucketizarTau(tau, EG_CRITICO_1PCT, EG_CRITICO_5PCT, EG_CRITICO_10PCT),
+    cointegrado: tau < EG_CRITICO_5PCT,
+  };
 }

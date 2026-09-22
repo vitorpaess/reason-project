@@ -20,10 +20,11 @@ const MIN_PERIODS = 2;
 // AAOI/VIAV, sigma=252%).
 // "log": ln(precoA) - ln(precoB), 1:1, sem hedge ratio — não ancorado em
 // nenhum preço específico, então não carrega esse viés histórico.
-// Ainda "normalizado" por padrão: o ranking e as páginas de par continuam
-// no comportamento já validado até a comparação entre os dois ser decidida.
+// Ativado como padrão após a comparação em 3 pares (sigma caiu de 3 a 30x,
+// z de AAOI/VIAV chegou a inverter de sinal) — "normalizado" continua
+// disponível passando o parâmetro explicitamente, pra comparação.
 export type SpreadMode = "log" | "normalizado";
-export const SPREAD_MODE: SpreadMode = "normalizado";
+export const SPREAD_MODE: SpreadMode = "log";
 
 function computeSpread(precoA: number[], precoB: number[], modo: SpreadMode): number[] {
   if (modo === "log") {
@@ -158,5 +159,15 @@ export function computeZScoreSeries(
     // variação percentual pra oscilações do tamanho que o spread costuma
     // ter), então esse desvio já sai em "% do valor da operação" nos dois.
     desvio_spread_63d: desvioMovel[i],
+    // Média móvel usada no numerador do z-score — exposta pelo mesmo motivo
+    // que o desvio acima, e também pro diagnóstico de média móvel vs. fixa
+    // (lib/ranking.ts) reconstruir o z que seria observado se a média
+    // ficasse travada no valor do dia de entrada.
+    media_spread_63d: mediaMovel[i],
+    // Preço bruto alinhado de cada ponta — exposto pro teste de
+    // cointegração de Engle-Granger (lib/mean-reversion.ts), que precisa
+    // regredir os NÍVEIS de log-preço, não só o spread já combinado 1:1.
+    preco_a: precoA[i],
+    preco_b: precoB[i],
   }));
 }

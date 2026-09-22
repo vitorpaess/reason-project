@@ -20,6 +20,13 @@ export type ZScoreRow = {
   // por lib/ranking.ts pra converter distância em z em % esperado de
   // movimento do spread.
   desvio_spread_63d: number | null;
+  // Média móvel do spread (mesma janela) — numerador do z-score, usada pro
+  // diagnóstico de média móvel vs. fixa em lib/ranking.ts.
+  media_spread_63d: number | null;
+  // Preço bruto alinhado de cada ponta (não normalizado) — usado pelo teste
+  // de cointegração de Engle-Granger em lib/mean-reversion.ts.
+  preco_a: number | null;
+  preco_b: number | null;
 };
 
 export type SignalEvent = {

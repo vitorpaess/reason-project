@@ -11,11 +11,12 @@ import {
   adfTest,
   computeCUSUM,
   diasEntreDatas,
+  engleGrangerTest,
   medianaValida,
   rollingBeta,
   rollingHalfLife,
   HALFLIFE_LONG_WINDOW,
-  type AdfResultado,
+  type PFaixa,
   type BetaPoint,
 } from "./mean-reversion";
 import { EXIT_THRESHOLD } from "./config";
@@ -63,12 +64,13 @@ export const BETA_VAR_MAX = 0.2; // 20%
 // fechamento) — o filtro de liquidez mínima do enunciado não é aplicado.
 // Ver explicação no fim da implementação.
 
-// Selo (não-filtro) de estacionariedade: ADF sobre os últimos ADF_JANELA
-// dias do spread — deliberadamente diferente do ADF de histórico inteiro
-// mostrado na página do par (lib/mean-reversion.ts), que reage devagar
-// demais pra ser útil como leitura de regime recente. Só informativo: não
-// entra em `motivos`/`cinza` nem afeta o score.
-export const ADF_JANELA = 200;
+// Selos (não-filtro) de estacionariedade/cointegração: ADF e Engle-Granger
+// sobre os últimos JANELA_ESTACIONARIEDADE dias — deliberadamente uma
+// janela diferente do ADF de histórico inteiro mostrado na página do par
+// (lib/mean-reversion.ts), que reage devagar demais pra ser útil como
+// leitura de regime recente. Só informativos: não entram em
+// `motivos`/`cinza` nem afetam o score.
+export const JANELA_ESTACIONARIEDADE = 200;
 // ------------------------------------------------------------------------
 
 function medianaSimples(valores: number[]): number | null {
@@ -222,10 +224,11 @@ export type MetricasBrutas = {
   meiaVidaMediana: number | null;
   taxa: TaxaReversaoBruta;
   motivos: string[]; // filtros reprovados / motivos de dado insuficiente
-  // Selo informativo, não-filtro — ver ADF_JANELA acima. null = histórico
-  // curto demais pros últimos ADF_JANELA dias (não deveria acontecer com
+  // Selos informativos, não-filtro — ver JANELA_ESTACIONARIEDADE acima.
+  // null = histórico curto demais pra janela (não deveria acontecer com
   // dado real, mas cai como "sem dado" na tela).
-  adfPFaixa: AdfResultado["pFaixa"] | null;
+  adfPFaixa: PFaixa | null;
+  eggPFaixa: PFaixa | null;
 };
 
 function ultimoBetaValido(beta: BetaPoint[]): { idx: number; valor: number } | null {
@@ -259,6 +262,7 @@ export function computeMetricasBrutas(
       taxa: { sucessos: 0, n: 0, diasMedianosSucesso: null, perdaMediaZ: null, numFalhas: 0 },
       motivos: ["Sem dados de preço"],
       adfPFaixa: null,
+      eggPFaixa: null,
     };
   }
 
@@ -267,7 +271,9 @@ export function computeMetricasBrutas(
   const sigma = ultimo.desvio_spread_63d;
   const longa = rollingHalfLife(rows, HALFLIFE_LONG_WINDOW);
   const meiaVidaMediana = medianaValida(longa);
-  const adfPFaixa = adfTest(rows.slice(-ADF_JANELA))?.pFaixa ?? null;
+  const janelaRecente = rows.slice(-JANELA_ESTACIONARIEDADE);
+  const adfPFaixa = adfTest(janelaRecente)?.pFaixa ?? null;
+  const eggPFaixa = engleGrangerTest(janelaRecente)?.pFaixa ?? null;
 
   // Filtro: correlação móvel atual.
   const correlacao = ultimo.correlacao_movel_63d;
@@ -319,6 +325,7 @@ export function computeMetricasBrutas(
       taxa: { sucessos: 0, n: 0, diasMedianosSucesso: null, perdaMediaZ: null, numFalhas: 0 },
       motivos,
       adfPFaixa,
+      eggPFaixa,
     };
   }
 
@@ -358,6 +365,7 @@ export function computeMetricasBrutas(
     taxa,
     motivos,
     adfPFaixa,
+    eggPFaixa,
   };
 }
 
@@ -381,9 +389,11 @@ export type RankingRow = {
   score: number | null;
   motivos: string[];
   cinza: boolean;
-  // Selo informativo (ADF sobre os últimos ADF_JANELA dias do spread) —
-  // não entra em `cinza`/`motivos` nem afeta `score` ou a ordenação.
-  adfPFaixa: AdfResultado["pFaixa"] | null;
+  // Selos informativos (ADF e Engle-Granger sobre os últimos
+  // JANELA_ESTACIONARIEDADE dias) — não entram em `cinza`/`motivos` nem
+  // afetam `score` ou a ordenação.
+  adfPFaixa: PFaixa | null;
+  eggPFaixa: PFaixa | null;
   tickerACount: number;
   tickerBCount: number;
   melhorParTickerA: boolean;
@@ -436,6 +446,7 @@ export function finalizarRanking(brutas: MetricasBrutas[]): RankingRow[] {
       motivos: b.motivos,
       cinza,
       adfPFaixa: b.adfPFaixa,
+      eggPFaixa: b.eggPFaixa,
       tickerACount: 0,
       tickerBCount: 0,
       melhorParTickerA: false,

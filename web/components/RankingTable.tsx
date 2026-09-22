@@ -3,6 +3,7 @@ import { colors } from "@/lib/theme";
 import { formatPct } from "@/lib/format";
 import { StatusPill } from "@/components/StatusPill";
 import type { RankingRow } from "@/lib/ranking";
+import type { PFaixa } from "@/lib/mean-reversion";
 
 const COLUNAS: { header: string; className: string; tooltip: string }[] = [
   { header: "Par", className: "text-left", tooltip: "Ticker A / Ticker B · setor" },
@@ -36,9 +37,15 @@ const COLUNAS: { header: string; className: string; tooltip: string }[] = [
     tooltip:
       "Teste de raiz unitária (ADF) sobre os últimos 200 dias do spread — não é usado como filtro, só indicativo de estacionariedade recente. Verde: p<0,05. Amarelo: p<0,10. Cinza: p≥0,10 ou dado insuficiente",
   },
+  {
+    header: "E-G",
+    className: "text-center",
+    tooltip:
+      "Cointegração de Engle-Granger (ln preço A ~ ln preço B, sem impor 1:1) sobre os últimos 200 dias — não é usado como filtro, só indicativo. Verde: p<0,05. Amarelo: p<0,10. Cinza: p≥0,10 ou dado insuficiente",
+  },
 ];
 
-function adfCor(pFaixa: RankingRow["adfPFaixa"]): string {
+function pFaixaCor(pFaixa: PFaixa | null): string {
   if (pFaixa === "< 0.01" || pFaixa === "< 0.05") return colors.statusGood;
   if (pFaixa === "< 0.10") return colors.statusWarning;
   return colors.inkMuted;
@@ -77,7 +84,7 @@ export function RankingTable({ rows }: { rows: RankingRow[] }) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[760px] border-collapse text-xs">
+      <table className="w-full min-w-[840px] border-collapse text-xs">
         <thead>
           <tr className="border-b border-border-strong text-[10px] uppercase tracking-wide text-ink-muted">
             {COLUNAS.map((c) => (
@@ -135,7 +142,10 @@ export function RankingTable({ rows }: { rows: RankingRow[] }) {
                 {formatPct(r.score, 3)}
               </td>
               <td className="px-2 py-2 text-center">
-                <StatusPill label={r.adfPFaixa ?? "N/D"} color={adfCor(r.adfPFaixa)} />
+                <StatusPill label={r.adfPFaixa ?? "N/D"} color={pFaixaCor(r.adfPFaixa)} />
+              </td>
+              <td className="px-2 py-2 text-center">
+                <StatusPill label={r.eggPFaixa ?? "N/D"} color={pFaixaCor(r.eggPFaixa)} />
               </td>
             </tr>
           ))}
