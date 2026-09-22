@@ -98,15 +98,26 @@ def upsert_pares_status(rows: list[dict]) -> None:
 
 
 def _fetch_paginado_paralelo(
-    table: str, select: str, order_by: Optional[list[str]] = None
+    table: str,
+    select: str,
+    order_by: Optional[list[str]] = None,
+    in_filtro: Optional[tuple[str, list[str]]] = None,
 ) -> list[dict]:
-    """Busca uma tabela inteira em paralelo: 1a chamada pega a contagem total,
-    depois todas as páginas são buscadas de uma vez via thread pool — bem
-    mais rápido que paginar sequencialmente quando a tabela tem centenas de
-    milhares de linhas (precos_diarios) ou milhares de linhas (pares_config)."""
+    """Busca uma tabela (ou um subconjunto filtrado por `in_filtro`) inteira
+    em paralelo: 1a chamada pega a contagem total, depois todas as páginas
+    são buscadas de uma vez via thread pool — bem mais rápido que paginar
+    sequencialmente quando a tabela tem centenas de milhares de linhas
+    (precos_diarios) ou milhares de linhas (pares_config).
+
+    in_filtro: (coluna, valores) — aplica um `.in_()` antes de paginar. Sem
+    isso, precos_diarios é lida por inteiro mesmo quando só um punhado de
+    tickers importa (ver fetch_precos_por_tickers)."""
 
     def _query(client: Client):
         q = client.table(table).select(select, count="exact")
+        if in_filtro is not None:
+            coluna, valores = in_filtro
+            q = q.in_(coluna, valores)
         for col in order_by or []:
             q = q.order(col)
         return q
@@ -135,12 +146,22 @@ def fetch_pares_config() -> list[dict]:
     return _fetch_paginado_paralelo(config.TABLE_PARES_CONFIG, "ticker_a,ticker_b,setor")
 
 
-def fetch_todos_precos() -> list[dict]:
-    """Todo o histórico de preço de todos os tickers, numa passada só — usado
-    pelo compute_zscore.py pra não refazer 1 fetch por ticker por par (um
-    ticker pode aparecer em várias dezenas de pares)."""
+def fetch_precos_por_tickers(tickers: list[str]) -> list[dict]:
+    """Todo o histórico de preço dos tickers passados, numa passada só —
+    usado pelo compute_zscore.py pra não refazer 1 fetch por ticker por par
+    (um ticker pode aparecer em várias dezenas de pares). Filtrado pelos
+    tickers de pares_config (não a tabela inteira): precos_diarios só
+    recebe upsert, nunca prune, de tickers que saem da planilha (ver
+    collect_prices.py) — sem esse filtro, o cálculo diário carregava ~5,6x
+    mais linhas do que precisava (682 mil na tabela inteira vs. ~122 mil
+    dos tickers dos ~150 pares atuais)."""
+    if not tickers:
+        return []
     return _fetch_paginado_paralelo(
-        config.TABLE_PRECOS, "ticker,data,preco_fechamento", order_by=["ticker", "data"]
+        config.TABLE_PRECOS,
+        "ticker,data,preco_fechamento",
+        order_by=["ticker", "data"],
+        in_filtro=("ticker", tickers),
     )
 
 

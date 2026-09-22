@@ -16,9 +16,14 @@ gráfico/tabela de oportunidades é recalculado sob demanda no Next.js
 histórico calculado dos ~7,9 mil pares aqui já estourou o armazenamento do
 projeto numa versão anterior.
 
-Carrega o preço de TODOS os tickers do Supabase uma vez só no início (não
-1 fetch por ticker por par) — com ~660 tickers compartilhados entre ~7.9k
-pares, buscar por par duplicaria fetches do mesmo ticker dezenas de vezes.
+Carrega o preço de todos os tickers usados pelos pares ATUAIS do Supabase
+numa passada só (não 1 fetch por ticker por par, já que um ticker pode
+aparecer em várias dezenas de pares) — filtrado pelos tickers de
+pares_config, não a tabela precos_diarios inteira: ela só recebe upsert,
+nunca remove tickers que saíram da planilha (ver collect_prices.py), então
+guarda preço de tickers de configurações antigas de pares que não existem
+mais. Buscar sem filtro chegou a ler ~5,6x mais linhas do que o necessário
+depois que o número de pares encolheu.
 """
 
 import math
@@ -30,8 +35,8 @@ import config
 import db
 
 
-def _carregar_precos_por_ticker() -> dict[str, pd.DataFrame]:
-    linhas = db.fetch_todos_precos()
+def _carregar_precos_por_ticker(tickers: list[str]) -> dict[str, pd.DataFrame]:
+    linhas = db.fetch_precos_por_tickers(tickers)
     df = pd.DataFrame(linhas)
     if df.empty:
         return {}
@@ -137,8 +142,9 @@ def run() -> None:
         print("[compute_zscore] pares_config está vazia — rode collect_prices.py antes.")
         return
 
-    print("[compute_zscore] Carregando preço de todos os tickers (uma vez)...")
-    precos_por_ticker = _carregar_precos_por_ticker()
+    tickers = sorted({p["ticker_a"] for p in pares} | {p["ticker_b"] for p in pares})
+    print(f"[compute_zscore] Carregando preço dos {len(tickers)} tickers usados pelos pares atuais...")
+    precos_por_ticker = _carregar_precos_por_ticker(tickers)
     print(f"[compute_zscore] {len(precos_por_ticker)} tickers com preço carregado em memória.")
 
     status_rows: list[dict] = []
