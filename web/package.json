@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "backtest": "tsx scripts/backtest-ranking.ts"
+    "backtest": "tsx scripts/backtest-ranking.ts",
+    "check:zscore-parity": "tsx scripts/check-zscore-parity.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",

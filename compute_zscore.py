@@ -23,6 +23,7 @@ pares, buscar por par duplicaria fetches do mesmo ticker dezenas de vezes.
 
 import math
 
+import numpy as np
 import pandas as pd
 
 import config
@@ -70,9 +71,15 @@ def _compute_signals(df: pd.DataFrame, ticker_a: str, ticker_b: str) -> pd.DataF
         df["retorno_a"].rolling(window=window, min_periods=MIN_PERIODS).corr(df["retorno_b"])
     )
 
-    preco_a_inicial = df["preco_a"].iloc[0]
-    preco_b_inicial = df["preco_b"].iloc[0]
-    df["spread"] = (df["preco_a"] / preco_a_inicial) - (df["preco_b"] / preco_b_inicial)
+    # ln(preco_a) - ln(preco_b), 1:1, sem hedge ratio — mesma fórmula e
+    # mesmo motivo de web/lib/zscore-calc.ts (SPREAD_MODE="log"): o modo
+    # anterior, (precoA/precoA0) - (precoB/precoB0) ancorado no preço do
+    # PRIMEIRO dia de todo o histórico, inflava o desvio-padrão do spread
+    # quando um dos dois ativos tinha uma reavaliação estrutural grande
+    # desde então (ex.: AAOI/VIAV, sigma chegou a 252%), podendo até
+    # inverter o sinal do z-score. Os dois lados do app têm que ficar
+    # sincronizados aqui — ver scripts/check_zscore_parity.py.
+    df["spread"] = np.log(df["preco_a"]) - np.log(df["preco_b"])
 
     media_63d = df["spread"].rolling(window=window, min_periods=MIN_PERIODS).mean()
     desvio_63d = df["spread"].rolling(window=window, min_periods=MIN_PERIODS).std()

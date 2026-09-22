@@ -17,7 +17,7 @@ const COLUNAS: { header: string; className: string; tooltip: string }[] = [
     header: "Taxa de reversão",
     className: "text-right",
     tooltip:
-      "Episódio = 1ª entrada de |z| na faixa ±tolerância_z do z atual (mesmo sinal), com o z como era calculado na época. Sucesso: |z| < z_saída antes de |z| ≥ z_stop e dentro do prazo_max. Falha: stop tocado primeiro ou prazo esgotado (empate no mesmo dia = falha). P_ajustada = (sucessos + k_shrink × P_geral) ÷ (n + k_shrink); P_geral é a taxa média (agrupada) de todos os pares",
+      "Episódio = 1ª entrada de |z| na faixa ±tolerância_z do z atual (mesmo sinal), com o z como era calculado na época. Desfecho com média/desvio do spread travados no dia de entrada (não a janela móvel dos dias seguintes): sucesso se voltou a |z_fixo| < z_saída antes de |z_fixo| ≥ z_stop e dentro do prazo_max. Falha: stop tocado primeiro ou prazo esgotado (empate no mesmo dia = falha). P_ajustada = (sucessos + k_shrink × P_geral) ÷ (n + k_shrink); P_geral é a taxa média (agrupada) de todos os pares",
   },
   {
     header: "Custo",

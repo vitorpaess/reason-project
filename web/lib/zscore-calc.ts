@@ -160,9 +160,9 @@ export function computeZScoreSeries(
     // ter), então esse desvio já sai em "% do valor da operação" nos dois.
     desvio_spread_63d: desvioMovel[i],
     // Média móvel usada no numerador do z-score — exposta pelo mesmo motivo
-    // que o desvio acima, e também pro diagnóstico de média móvel vs. fixa
-    // (lib/ranking.ts) reconstruir o z que seria observado se a média
-    // ficasse travada no valor do dia de entrada.
+    // que o desvio acima, e também pra lib/ranking.ts (taxaReversaoHistorica)
+    // reconstruir o z que seria observado se a média ficasse travada no
+    // valor do dia de entrada, ao avaliar se um episódio passado reverteu.
     media_spread_63d: mediaMovel[i],
     // Preço bruto alinhado de cada ponta — exposto pro teste de
     // cointegração de Engle-Granger (lib/mean-reversion.ts), que precisa

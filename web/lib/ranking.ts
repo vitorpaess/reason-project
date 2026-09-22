@@ -88,9 +88,11 @@ export type TaxaReversaoBruta = {
   sucessos: number;
   n: number;
   diasMedianosSucesso: number | null;
-  /** Média de (|z| de saída − |z| de entrada), em σ, das falhas deste par —
-   * null se numFalhas < 3 (amostra de falhas curta demais pra confiar na
-   * média; ver computeMetricasBrutas pro fallback). */
+  /** Média de (|z_fixo| de saída − |z_fixo| de entrada), em σ do dia de
+   * entrada de cada episódio (média/desvio travados na entrada, não a
+   * janela móvel do dia da saída — ver taxaReversaoHistorica), das falhas
+   * deste par — null se numFalhas < 3 (amostra de falhas curta demais pra
+   * confiar na média; ver computeMetricasBrutas pro fallback). */
   perdaMediaZ: number | null;
   numFalhas: number;
 };
@@ -102,15 +104,27 @@ function mediaSimples(valores: number[]): number {
 /**
  * Entre as excursões passadas do z-score com |z| dentro de ±TOLERANCIA_Z do
  * valor atual e mesmo sinal (usando o z como era calculado na época — a
- * série de z-score já é isso, não é recalculada), qual fração voltou a
- * |z| < Z_SAIDA antes de bater o stop e dentro de `prazoMaxLinhas` linhas
- * da série. Dias consecutivos dentro da faixa contam como UMA excursão
- * (uma amostra), não uma por dia — do contrário um regime persistente de
- * 40 dias inflaria n artificialmente.
+ * série de z-score já é isso, não é recalculada), qual fração REALMENTE
+ * reverteu antes de bater o stop e dentro de `prazoMaxLinhas` linhas da
+ * série. Dias consecutivos dentro da faixa contam como UMA excursão (uma
+ * amostra), não uma por dia — do contrário um regime persistente de 40
+ * dias inflaria n artificialmente.
  *
- * Dia a dia a partir da entrada: sucesso se |z| < Z_SAIDA antes de
- * |z| >= Z_STOP; falha se o stop é tocado primeiro OU o prazo esgota sem
- * sucesso (empate no mesmo dia conta como falha — checado nessa ordem,
+ * Desfecho com MÉDIA FIXA: a partir do dia de entrada, o desfecho de cada
+ * excursão não é lido de z_score_63d dia a dia — a média e o desvio-padrão
+ * do spread são travados no valor do PRÓPRIO dia de entrada
+ * (media_spread_63d[i]/desvio_spread_63d[i]) e reaplicados sobre o spread
+ * bruto dos dias seguintes. Ler z_score_63d[j] diretamente contaria como
+ * "sucesso" um episódio em que o spread nunca voltou perto do nível de
+ * entrada — só ficou parado num novo patamar enquanto a janela móvel de
+ * 63d arrastava atrás dele até a média "alcançar" o novo nível (ver
+ * media_spread_63d em lib/pairs-data.ts). Por construção, no próprio dia
+ * de entrada essa métrica fixa é idêntica a z_score_63d[i], então
+ * azEntrada não muda.
+ *
+ * Dia a dia a partir da entrada: sucesso se |z_fixo| < Z_SAIDA antes de
+ * |z_fixo| >= Z_STOP; falha se o stop é tocado primeiro OU o prazo esgota
+ * sem sucesso (empate no mesmo dia conta como falha — checado nessa ordem,
  * mas os dois são fisicamente exclusivos já que Z_STOP > Z_SAIDA). Falha
  * por prazo encerra no último dia do prazo.
  *
@@ -131,6 +145,9 @@ export function taxaReversaoHistorica(
   const bandaSup = alvo + TOLERANCIA_Z;
 
   const zs = rows.map((r) => r.z_score_63d);
+  const spreads = rows.map((r) => r.spread);
+  const mediasFixas = rows.map((r) => r.media_spread_63d);
+  const desviosFixos = rows.map((r) => r.desvio_spread_63d);
   const ultimoIdx = rows.length - 1;
 
   let emBanda = false;
@@ -149,6 +166,18 @@ export function taxaReversaoHistorica(
     const dentro = Math.sign(z) === sinal && az >= bandaInf && az <= bandaSup;
 
     if (dentro && !emBanda) {
+      const spreadEntrada = spreads[i];
+      const mediaFixa = mediasFixas[i];
+      const desvioFixo = desviosFixos[i];
+
+      // Não deveria acontecer na prática (media_spread_63d/desvio_spread_63d
+      // são computados junto com z_score_63d[i], que já sabemos não-nulo
+      // aqui) — guarda de tipo só pra não propagar null silenciosamente.
+      if (spreadEntrada === null || mediaFixa === null || desvioFixo === null || desvioFixo === 0) {
+        emBanda = dentro;
+        continue;
+      }
+
       const azEntrada = az;
       const fimJanela = i + prazoMaxLinhas;
       const fimObservavel = Math.min(fimJanela, ultimoIdx);
@@ -158,25 +187,25 @@ export function taxaReversaoHistorica(
       let azSaida: number | null = null;
 
       for (let j = i; j <= fimObservavel; j++) {
-        const zj = zs[j];
-        if (zj === null) continue;
-        const azj = Math.abs(zj);
-        if (azj < Z_SAIDA) {
+        const spreadJ = spreads[j];
+        if (spreadJ === null) continue;
+        const azFixoJ = Math.abs((spreadJ - mediaFixa) / desvioFixo);
+        if (azFixoJ < Z_SAIDA) {
           resultado = "sucesso";
           dias = j - i;
-          azSaida = azj;
+          azSaida = azFixoJ;
           break;
         }
-        if (azj >= Z_STOP) {
+        if (azFixoJ >= Z_STOP) {
           resultado = "falha";
           dias = j - i;
-          azSaida = azj;
+          azSaida = azFixoJ;
           break;
         }
         if (j === fimJanela) {
           resultado = "falha";
           dias = j - i;
-          azSaida = azj;
+          azSaida = azFixoJ;
           break;
         }
       }

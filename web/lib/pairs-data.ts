@@ -20,8 +20,12 @@ export type ZScoreRow = {
   // por lib/ranking.ts pra converter distância em z em % esperado de
   // movimento do spread.
   desvio_spread_63d: number | null;
-  // Média móvel do spread (mesma janela) — numerador do z-score, usada pro
-  // diagnóstico de média móvel vs. fixa em lib/ranking.ts.
+  // Média móvel do spread (mesma janela) — numerador do z-score, usada por
+  // lib/ranking.ts (taxaReversaoHistorica) pra travar a média/desvio do dia
+  // de entrada de cada episódio passado ao julgar se ele reverteu de
+  // verdade, em vez de reler o z_score_63d (janela móvel) de cada dia
+  // seguinte — evita contar como "sucesso" um episódio em que só a média
+  // móvel arrastou atrás do spread.
   media_spread_63d: number | null;
   // Preço bruto alinhado de cada ponta (não normalizado) — usado pelo teste
   // de cointegração de Engle-Granger em lib/mean-reversion.ts.
