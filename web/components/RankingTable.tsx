@@ -32,16 +32,16 @@ const COLUNAS: { header: string; className: string; tooltip: string }[] = [
       "[P_ajustada × Ganho − (1 − P_ajustada) × Perda − Custo] ÷ dias esperados (meia-vida mediana) — pode ser negativo. Perda = média de (|z| saída − |z| entrada) das falhas deste par em σ_spread atual (se ≥3 falhas; senão z_stop − |z| atual), também pode ser negativa",
   },
   {
-    header: "ADF",
+    header: "ADF 200d",
     className: "text-center",
     tooltip:
-      "Teste de raiz unitária (ADF) sobre os últimos 200 dias do spread — não é usado como filtro, só indicativo de estacionariedade recente. Verde: p<0,05. Amarelo: p<0,10. Cinza: p≥0,10 ou dado insuficiente",
+      "Teste de raiz unitária (ADF) sobre os ÚLTIMOS 200 DIAS do spread — não é usado como filtro, só indicativo de estacionariedade recente. A página do par mostra um ADF diferente (histórico completo, reage mais devagar) — os dois podem legitimamente divergir. Verde: p<0,05. Amarelo: p<0,10. Cinza: p≥0,10 ou dado insuficiente",
   },
   {
-    header: "E-G",
+    header: "E-G 200d",
     className: "text-center",
     tooltip:
-      "Cointegração de Engle-Granger (ln preço A ~ ln preço B, sem impor 1:1) sobre os últimos 200 dias — não é usado como filtro, só indicativo. Verde: p<0,05. Amarelo: p<0,10. Cinza: p≥0,10 ou dado insuficiente",
+      "Cointegração de Engle-Granger (ln preço A ~ ln preço B, sem impor 1:1) sobre os ÚLTIMOS 200 DIAS — não é usado como filtro, só indicativo. Verde: p<0,05. Amarelo: p<0,10. Cinza: p≥0,10 ou dado insuficiente",
   },
 ];
 

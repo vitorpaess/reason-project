@@ -127,8 +127,9 @@ export function MeanReversionSection({
           <StatusPill label={correlacaoLabel} color={correlacaoOk ? colors.statusGood : colors.inkMuted} />
           {adf && (
             <StatusPill
-              label={`ADF p ${adf.pFaixa}`}
+              label={`ADF (histórico completo, ${rows.length}d) p ${adf.pFaixa}`}
               color={adf.estacionario ? colors.statusGood : colors.inkMuted}
+              title="Roda sobre TODO o histórico disponível deste par, não só os últimos 200 dias — reage devagar de propósito (filtro de qualidade de longo prazo, não leitura de regime recente). O selo de ADF no ranking do dashboard usa só os últimos 200 dias, então os dois podem legitimamente divergir para o mesmo par."
             />
           )}
           {cusum.quebraRecenteData && (
