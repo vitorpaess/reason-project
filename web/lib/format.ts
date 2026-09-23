@@ -1,5 +1,5 @@
-// Formatadores pequenos reusados por mais de um componente (ParSquare,
-// RankingTable) — sem I/O, sem estado.
+// Formatadores pequenos reusados por mais de um componente — sem I/O, sem
+// estado.
 
 export function formatPct(v: number | null, casas: number): string {
   if (v === null) return "—";

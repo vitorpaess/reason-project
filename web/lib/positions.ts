@@ -14,6 +14,17 @@ export type ManualPosition = {
 
 const TABLE = "posicoes_manuais";
 
+/** Todos os pares com posição aberta agora — usado pelo ranking do
+ * dashboard pra decidir o estado (oportunidade_entrada/oportunidade_saida/
+ * em_operacao/espera) de cada linha. Buscado à parte de fetchRanking (que
+ * tem cache de 24h) porque entrar/sair de posição precisa refletir na hora,
+ * não só no dia seguinte. */
+export async function fetchTodosParesComPosicaoAberta(): Promise<Set<string>> {
+  const { data, error } = await supabase().from(TABLE).select("par").is("data_saida", null);
+  if (error) throw new Error(`Falha ao listar posições abertas: ${error.message}`);
+  return new Set((data ?? []).map((r) => r.par as string));
+}
+
 export async function getOpenPosition(par: string): Promise<ManualPosition | null> {
   const { data, error } = await supabase()
     .from(TABLE)

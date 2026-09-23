@@ -1,16 +1,14 @@
-import Link from "next/link";
-import { fetchParesTable, fetchSetores, type ParesSort } from "@/lib/pares-repo";
-import { fetchRanking } from "@/lib/ranking-repo";
+import { fetchSetores, estadoFromRow } from "@/lib/pares-repo";
+import { fetchRanking, type RankingRowComEstado } from "@/lib/ranking-repo";
+import { fetchTodosParesComPosicaoAberta } from "@/lib/positions";
 import type { Estado } from "@/lib/pairs-data";
 import { ParesFilterBar } from "@/components/ParesFilterBar";
-import { ParSquare } from "@/components/ParSquare";
 import { RankingTable } from "@/components/RankingTable";
-import { buildQuery } from "@/lib/url-params";
 
 export const dynamic = "force-dynamic";
 
-const PAGE_SIZE = 200;
-const SORT_VALUES: ParesSort[] = ["z_desc", "z_asc", "correlacao_desc", "correlacao_asc", "par_asc"];
+type RankingSort = "score_desc" | "score_asc" | "z_desc" | "z_asc" | "par_asc";
+const SORT_VALUES: RankingSort[] = ["score_desc", "score_asc", "z_desc", "z_asc", "par_asc"];
 const STATUS_VALUES: Estado[] = [
   "oportunidade_entrada",
   "oportunidade_saida",
@@ -23,6 +21,24 @@ function param(sp: { [key: string]: string | string[] | undefined }, key: string
   return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 
+function ordenar(rows: RankingRowComEstado[], sort: RankingSort): RankingRowComEstado[] {
+  const ordenado = [...rows];
+  switch (sort) {
+    case "score_asc":
+      return ordenado.sort((a, b) => (a.score ?? Infinity) - (b.score ?? Infinity));
+    case "z_desc":
+      return ordenado.sort((a, b) => Math.abs(b.zAtual ?? 0) - Math.abs(a.zAtual ?? 0));
+    case "z_asc":
+      return ordenado.sort((a, b) => Math.abs(a.zAtual ?? 0) - Math.abs(b.zAtual ?? 0));
+    case "par_asc":
+      return ordenado.sort((a, b) => a.par.localeCompare(b.par));
+    case "score_desc":
+    default:
+      // Já vem ordenado por score desc de finalizarRanking — mantém.
+      return ordenado;
+  }
+}
+
 export default async function DashboardPage({ searchParams }: PageProps<"/dashboard">) {
   const sp = await searchParams;
   const search = param(sp, "q");
@@ -30,79 +46,45 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
   const statusRaw = param(sp, "status");
   const status = STATUS_VALUES.includes(statusRaw as Estado) ? (statusRaw as Estado) : undefined;
   const sortRaw = param(sp, "sort");
-  const sort = SORT_VALUES.includes(sortRaw as ParesSort) ? (sortRaw as ParesSort) : "z_desc";
-  const pageRaw = Number(param(sp, "page"));
-  const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
+  const sort = SORT_VALUES.includes(sortRaw as RankingSort) ? (sortRaw as RankingSort) : "score_desc";
 
-  const current: Record<string, string | undefined> = {
-    q: search,
-    setor,
-    status,
-    sort: sort === "z_desc" ? undefined : sort,
-  };
-
-  const [{ rows, total }, setores, ranking] = await Promise.all([
-    fetchParesTable({ search, setor, status, sort, page, pageSize: PAGE_SIZE }),
-    fetchSetores(),
+  const [ranking, setores, posicoesAbertas] = await Promise.all([
     fetchRanking(),
+    fetchSetores(),
+    // À parte de fetchRanking (que tem cache de 24h): entrar/sair de posição
+    // precisa refletir no estado exibido na hora, não só no dia seguinte.
+    fetchTodosParesComPosicaoAberta(),
   ]);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const scorePorPar = new Map(ranking.map((r) => [r.par, r.score]));
+  const comEstado: RankingRowComEstado[] = ranking.map((r) => {
+    const posicaoAberta = posicoesAbertas.has(r.par);
+    return { ...r, posicaoAberta, estado: estadoFromRow(r.zAtual, posicaoAberta) };
+  });
+
+  const termo = search?.trim().toUpperCase();
+  const filtrado = comEstado.filter((r) => {
+    if (termo && !r.tickerA.includes(termo) && !r.tickerB.includes(termo)) return false;
+    if (setor && r.setor !== setor) return false;
+    if (status && r.estado !== status) return false;
+    return true;
+  });
+
+  const rows = ordenar(filtrado, sort);
 
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-xl font-semibold text-ink-primary">Pares</h1>
-        <span className="text-sm text-ink-muted">{total.toLocaleString("pt-BR")} pares</span>
+        <span className="text-sm text-ink-muted">{ranking.length.toLocaleString("pt-BR")} pares</span>
       </div>
 
-      <div className="mb-6 rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow-card)]">
+      <div className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow-card)]">
         <h2 className="mb-4 text-sm font-semibold text-ink-secondary">Ranking de oportunidades</h2>
-        <RankingTable rows={ranking} />
+        <ParesFilterBar setores={setores} />
+        <div className="mt-4">
+          <RankingTable rows={rows} />
+        </div>
       </div>
-
-      <ParesFilterBar setores={setores} />
-
-      {rows.length === 0 ? (
-        <p className="py-16 text-center text-sm text-ink-muted">Nenhum par encontrado.</p>
-      ) : (
-        <div className="mt-5 grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12">
-          {rows.map((row) => (
-            <ParSquare key={row.par} row={row} score={scorePorPar.get(row.par) ?? null} />
-          ))}
-        </div>
-      )}
-
-      {totalPages > 1 && (
-        <div className="mt-6 flex items-center justify-between text-sm text-ink-muted">
-          <Link
-            href={`/dashboard${buildQuery(current, { page: page > 1 ? page - 1 : undefined })}`}
-            aria-disabled={page <= 1}
-            className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
-              page <= 1
-                ? "pointer-events-none opacity-40"
-                : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"
-            }`}
-          >
-            Anterior
-          </Link>
-          <span>
-            Página {page} de {totalPages}
-          </span>
-          <Link
-            href={`/dashboard${buildQuery(current, { page: page < totalPages ? page + 1 : undefined })}`}
-            aria-disabled={page >= totalPages}
-            className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
-              page >= totalPages
-                ? "pointer-events-none opacity-40"
-                : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"
-            }`}
-          >
-            Próxima
-          </Link>
-        </div>
-      )}
     </div>
   );
 }

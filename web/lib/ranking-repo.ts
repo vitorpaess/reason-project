@@ -4,6 +4,13 @@ import { fetchTodosPares } from "./pares-repo";
 import { fetchPriceSeriesForTickers } from "./company-prices";
 import { computeZScoreSeries } from "./zscore-calc";
 import { computeMetricasBrutas, finalizarRanking, type RankingRow } from "./ranking";
+import type { Estado } from "./pairs-data";
+
+// RankingRow decorado com o estado atual (oportunidade_entrada/saída, em
+// operação, aguardando) — calculado fora do cache de fetchRanking (ver
+// dashboard/page.tsx), porque depende de posições manuais que podem mudar
+// a qualquer momento, não só 1x por dia como o preço.
+export type RankingRowComEstado = RankingRow & { estado: Estado | null; posicaoAberta: boolean };
 
 /**
  * Monta o ranking de oportunidades pro universo inteiro de pares — busca o

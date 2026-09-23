@@ -13,10 +13,10 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
 ];
 
 const SORT_OPTIONS: { value: string; label: string }[] = [
+  { value: "score_desc", label: "Score — maior primeiro" },
+  { value: "score_asc", label: "Score — menor primeiro" },
   { value: "z_desc", label: "|Z| — maior primeiro" },
   { value: "z_asc", label: "|Z| — menor primeiro" },
-  { value: "correlacao_desc", label: "Correlação — maior primeiro" },
-  { value: "correlacao_asc", label: "Correlação — menor primeiro" },
   { value: "par_asc", label: "Par (A-Z)" },
 ];
 
@@ -98,8 +98,8 @@ export function ParesFilterBar({ setores }: { setores: string[] }) {
         </select>
 
         <select
-          value={current.sort ?? "z_desc"}
-          onChange={(e) => navigate({ sort: e.target.value === "z_desc" ? undefined : e.target.value })}
+          value={current.sort ?? "score_desc"}
+          onChange={(e) => navigate({ sort: e.target.value === "score_desc" ? undefined : e.target.value })}
           className={inputClass}
         >
           {SORT_OPTIONS.map((opt) => (

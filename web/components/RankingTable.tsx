@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { colors } from "@/lib/theme";
+import { colors, statusColor, statusLabel } from "@/lib/theme";
 import { formatPct } from "@/lib/format";
 import { StatusPill } from "@/components/StatusPill";
-import type { RankingRow } from "@/lib/ranking";
+import type { RankingRowComEstado } from "@/lib/ranking-repo";
 import type { PFaixa } from "@/lib/mean-reversion";
 
 const COLUNAS: { header: string; className: string; tooltip: string }[] = [
@@ -77,7 +77,7 @@ function TickerComBadge({
   );
 }
 
-export function RankingTable({ rows }: { rows: RankingRow[] }) {
+export function RankingTable({ rows }: { rows: RankingRowComEstado[] }) {
   if (rows.length === 0) {
     return <p className="py-8 text-center text-sm text-ink-muted">Sem pares suficientes pra ranquear.</p>;
   }
@@ -110,7 +110,14 @@ export function RankingTable({ rows }: { rows: RankingRow[] }) {
                   <span className="text-ink-muted">/</span>
                   <TickerComBadge ticker={r.tickerB} count={r.tickerBCount} melhorPar={r.melhorParTickerB} />
                 </Link>
-                <div className="text-[10px] text-ink-muted">{r.setor}</div>
+                <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-ink-muted">
+                  <span>{r.setor}</span>
+                  {r.estado && (
+                    <span className="font-medium" style={{ color: statusColor(r.estado) }}>
+                      · {statusLabel[r.estado]}
+                    </span>
+                  )}
+                </div>
               </td>
               <td className="px-2 py-2 text-right tabular-nums text-ink-secondary">
                 {r.zAtual !== null ? r.zAtual.toFixed(2) : "—"}
