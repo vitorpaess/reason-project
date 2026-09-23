@@ -429,12 +429,25 @@ function ols(X: number[][], y: number[]): { coef: number[]; se: number[] } | nul
  * Núcleo do teste ADF (Dickey-Fuller aumentado), reusado tanto pelo ADF
  * "puro" sobre o spread quanto pelo segundo estágio do Engle-Granger sobre
  * resíduos de cointegração — ambos são "roda ADF numa série y". Regressão:
- * Δy(t) = alpha + gamma*y(t-1) + Σ delta_i*Δy(t-i) + ε(t), testando
+ * Δy(t) = [alpha +] gamma*y(t-1) + Σ delta_i*Δy(t-i) + ε(t), testando
  * H0: gamma=0 (raiz unitária) vs H1: gamma<0 (estacionário). Retorna
  * tau = gamma_hat / erro-padrão(gamma_hat); null se a amostra for curta
  * demais pra um teste confiável.
+ *
+ * comConstante controla o alpha entre colchetes acima. ADF "puro" (dado
+ * bruto) sempre usa true. O segundo estágio do Engle-Granger usa false: os
+ * resíduos da regressão de cointegração (que já tem constante) já têm
+ * média ~0 por construção, então uma constante aqui seria redundante — só
+ * gastaria 1 grau de liberdade à toa e divergiria da definição padrão do
+ * teste (assim que statsmodels.tsa.stattools.coint roda a etapa 2, com
+ * regression="n", e é a base dos valores críticos de MacKinnon usados em
+ * EG_CRITICO_*). Verificado numericamente contra statsmodels: com essa
+ * distinção, tau bate em 6 casas decimais nos dois casos (ADF puro E
+ * Engle-Granger); antes, reusar sempre a versão com constante fazia o tau
+ * do Engle-Granger sair sistematicamente menos negativo (~0.015 de
+ * diferença nos casos testados) — viés pequeno, mas real.
  */
-function adfTauDaSerie(y: number[], lags: number): number | null {
+function adfTauDaSerie(y: number[], lags: number, comConstante: boolean = true): number | null {
   const n = y.length;
   if (n < lags + 10) return null;
 
@@ -445,7 +458,7 @@ function adfTauDaSerie(y: number[], lags: number): number | null {
   const X: number[][] = [];
   const alvo: number[] = [];
   for (let t = lags + 1; t <= n - 1; t++) {
-    const linha = [1, y[t - 1]];
+    const linha = comConstante ? [1, y[t - 1]] : [y[t - 1]];
     for (let l = 1; l <= lags; l++) linha.push(delta[t - l - 1]);
     X.push(linha);
     alvo.push(delta[t - 1]);
@@ -454,7 +467,8 @@ function adfTauDaSerie(y: number[], lags: number): number | null {
 
   const resultado = ols(X, alvo);
   if (resultado === null) return null;
-  return resultado.coef[1] / resultado.se[1];
+  const idxGamma = comConstante ? 1 : 0;
+  return resultado.coef[idxGamma] / resultado.se[idxGamma];
 }
 
 /**
@@ -516,7 +530,7 @@ export function engleGrangerTest(
   if (regressao === null) return null;
 
   const residuos = pares.map(([lnA, lnB]) => lnA - (regressao.coef[0] + regressao.coef[1] * lnB));
-  const tau = adfTauDaSerie(residuos, lags);
+  const tau = adfTauDaSerie(residuos, lags, false);
   if (tau === null) return null;
 
   return {
