@@ -1,5 +1,5 @@
 import { ENTRY_THRESHOLD, ROLLING_WINDOW_DAYS, type PairDef } from "@/lib/config";
-import { statusColor, statusLabel } from "@/lib/theme";
+import { colors, statusColor, statusLabel } from "@/lib/theme";
 import { PairIcon } from "@/lib/pair-icons";
 import type { PairStatus } from "@/lib/pairs-data";
 import { StatCard } from "@/components/StatCard";
@@ -49,6 +49,14 @@ export async function PairOverview({
               )}
               {status.estado === "oportunidade_saida" && (
                 <PositionControl par={pairDef.label} action="sair" />
+              )}
+              {status.estado === "em_operacao" && (
+                <PositionControl
+                  par={pairDef.label}
+                  action="sair"
+                  label="Remover posição"
+                  color={colors.inkMuted}
+                />
               )}
             </StatCard>
 

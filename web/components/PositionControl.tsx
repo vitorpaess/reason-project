@@ -7,9 +7,16 @@ import { colors } from "@/lib/theme";
 export function PositionControl({
   par,
   action,
+  label: labelProp,
+  color: colorProp,
 }: {
   par: string;
   action: "entrar" | "sair";
+  /** Sobrescreve o texto padrão — usado quando o mesmo endpoint de saída é
+   * oferecido fora do fluxo guiado pelo sinal (ex: remover manualmente uma
+   * posição ainda "em operação", ver PairOverview). */
+  label?: string;
+  color?: string;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -17,8 +24,8 @@ export function PositionControl({
 
   const isEnter = action === "entrar";
   const endpoint = isEnter ? "/api/positions/enter" : "/api/positions/exit";
-  const label = isEnter ? "Marcar entrada" : "Marcar saída";
-  const color = isEnter ? colors.statusCritical : colors.statusGood;
+  const label = labelProp ?? (isEnter ? "Marcar entrada" : "Marcar saída");
+  const color = colorProp ?? (isEnter ? colors.statusCritical : colors.statusGood);
 
   async function handleClick() {
     setLoading(true);
