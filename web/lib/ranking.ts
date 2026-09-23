@@ -407,6 +407,7 @@ export type RankingRow = {
   setor: string;
   zAtual: number | null;
   ganhoPorDia: number | null;
+  meiaVidaMediana: number | null;
   taxaReversao: {
     pAjustada: number;
     n: number;
@@ -463,6 +464,7 @@ export function finalizarRanking(brutas: MetricasBrutas[]): RankingRow[] {
       setor: b.setor,
       zAtual: b.zAtual,
       ganhoPorDia: b.ganhoPorDia,
+      meiaVidaMediana: b.meiaVidaMediana,
       taxaReversao: {
         pAjustada,
         n: b.taxa.n,

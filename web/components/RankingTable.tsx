@@ -14,6 +14,12 @@ const COLUNAS: { header: string; className: string; tooltip: string }[] = [
     tooltip: "(|z| atual − z_saida) × σ_spread ÷ meia-vida mediana do par",
   },
   {
+    header: "Meia-vida",
+    className: "text-right",
+    tooltip:
+      "Mediana da meia-vida móvel (janela longa, 200d) do par — mesmo valor usado como denominador do Ganho/dia e do Score",
+  },
+  {
     header: "Taxa de reversão",
     className: "text-right",
     tooltip:
@@ -84,7 +90,7 @@ export function RankingTable({ rows }: { rows: RankingRowComEstado[] }) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[840px] border-collapse text-xs">
+      <table className="w-full min-w-[920px] border-collapse text-xs">
         <thead>
           <tr className="border-b border-border-strong text-[10px] uppercase tracking-wide text-ink-muted">
             {COLUNAS.map((c) => (
@@ -124,6 +130,9 @@ export function RankingTable({ rows }: { rows: RankingRowComEstado[] }) {
               </td>
               <td className="px-2 py-2 text-right tabular-nums text-ink-secondary">
                 {formatPct(r.ganhoPorDia, 2)}
+              </td>
+              <td className="px-2 py-2 text-right tabular-nums text-ink-secondary">
+                {r.meiaVidaMediana != null ? `${r.meiaVidaMediana.toFixed(0)}d` : "—"}
               </td>
               <td className="px-2 py-2 text-right tabular-nums text-ink-secondary">
                 {formatPct(r.taxaReversao.pAjustada, 0)}{" "}
