@@ -1,11 +1,18 @@
 import { fetchSetores, estadoFromRow } from "@/lib/pares-repo";
 import { fetchRanking, type RankingRowComEstado } from "@/lib/ranking-repo";
+import { fetchTodasOperacoes } from "@/lib/garantia-repo";
 import { fetchTodosParesComPosicaoAberta } from "@/lib/positions";
 import type { Estado } from "@/lib/pairs-data";
 import { ParesFilterBar } from "@/components/ParesFilterBar";
 import { RankingTable } from "@/components/RankingTable";
+import { GarantiaCalculadora } from "@/components/GarantiaCalculadora";
 
 export const dynamic = "force-dynamic";
+// Cache do ranking frio (1x/dia, ou no primeiro request após um deploy)
+// ainda recalcula tudo do zero — acima do timeout padrão de function da
+// Vercel. Estende o limite pra esse caso não cair com 504 enquanto o
+// cache está frio (ver lib/ranking-repo.ts).
+export const maxDuration = 60;
 
 type RankingSort = "score_desc" | "score_asc" | "z_desc" | "z_asc" | "par_asc";
 const SORT_VALUES: RankingSort[] = ["score_desc", "score_asc", "z_desc", "z_asc", "par_asc"];
@@ -48,12 +55,13 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
   const sortRaw = param(sp, "sort");
   const sort = SORT_VALUES.includes(sortRaw as RankingSort) ? (sortRaw as RankingSort) : "score_desc";
 
-  const [ranking, setores, posicoesAbertas] = await Promise.all([
+  const [ranking, setores, posicoesAbertas, operacoes] = await Promise.all([
     fetchRanking(),
     fetchSetores(),
     // À parte de fetchRanking (que tem cache de 24h): entrar/sair de posição
     // precisa refletir no estado exibido na hora, não só no dia seguinte.
     fetchTodosParesComPosicaoAberta(),
+    fetchTodasOperacoes(),
   ]);
 
   const comEstado: RankingRowComEstado[] = ranking.map((r) => {
@@ -84,6 +92,10 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
         <div className="mt-4">
           <RankingTable rows={rows} />
         </div>
+      </div>
+
+      <div className="mt-6">
+        <GarantiaCalculadora operacoes={operacoes} />
       </div>
     </div>
   );

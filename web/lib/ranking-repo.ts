@@ -1,7 +1,6 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
-import { fetchTodosPares } from "./pares-repo";
-import { fetchPriceSeriesForTickers } from "./company-prices";
+import { fetchDadosBase, precosParaMapa } from "./dados-base-repo";
 import { computeZScoreSeries } from "./zscore-calc";
 import { computeMetricasBrutas, finalizarRanking, type RankingRow } from "./ranking";
 import type { Estado } from "./pairs-data";
@@ -20,11 +19,10 @@ export type RankingRowComEstado = RankingRow & { estado: Estado | null; posicaoA
  * do banco) e aplica lib/ranking.ts.
  */
 async function fetchRankingSemCache(): Promise<RankingRow[]> {
-  const pares = await fetchTodosPares();
+  const { pares, precos: precosArray } = await fetchDadosBase();
   if (pares.length === 0) return [];
 
-  const tickers = Array.from(new Set(pares.flatMap((p) => [p.a, p.b])));
-  const precos = await fetchPriceSeriesForTickers(tickers);
+  const precos = precosParaMapa(precosArray);
 
   const brutas = pares.map((p) => {
     const rows = computeZScoreSeries(precos.get(p.a) ?? [], precos.get(p.b) ?? []);
